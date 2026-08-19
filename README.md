@@ -29,6 +29,7 @@ This tutorial implements the design principles and learnings from [`doc/Research
 ### Prerequisites
 
 Ensure your local environment is configured to execute:
+* Node (when using [MCP Inspector](https://modelcontextprotocol.io/docs/2026-07-28/tools/inspector/web))
 * Git
 * Maven
 * JDK21
@@ -49,3 +50,9 @@ java -jar target/MCP-1.0.0.jar
 ```
 
 This will output the name and version of the loaded MCP schema implementation and log the diagnostics to `MCP.log`.
+
+### Test with MCP Inspector
+
+```bash
+npx @modelcontextprotocol/inspector@latest java -cp target/MCP-1.0.0.jar edu.java.service.Server
+```
