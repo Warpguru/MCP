@@ -16,9 +16,26 @@ import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
+import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
+import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult.StopReason;
+import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
+import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
+import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
+import io.modelcontextprotocol.spec.McpSchema.ListResourceTemplatesResult;
+import io.modelcontextprotocol.spec.McpSchema.ListResourcesResult;
 import io.modelcontextprotocol.spec.McpSchema.ListToolsResult;
+import io.modelcontextprotocol.spec.McpSchema.Prompt;
+import io.modelcontextprotocol.spec.McpSchema.PromptMessage;
+import io.modelcontextprotocol.spec.McpSchema.ReadResourceRequest;
+import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
+import io.modelcontextprotocol.spec.McpSchema.Resource;
+import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
+import io.modelcontextprotocol.spec.McpSchema.Role;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
+import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
+import reactor.core.publisher.Mono;
 
 /**
  * Universal MCP Client implementation using the <a href="https://github.com/modelcontextprotocol/java-sdk">MCP Java SDK</a>.
@@ -51,10 +68,10 @@ public class Client {
         } else {
             command = "java";
             commandArgs.add("-cp");
-            commandArgs.add("target/MCP-" + MCP.MCP_VERSION + ".jar");
+            commandArgs.add(System.getProperty("java.class.path"));
             commandArgs.add("edu.java.service.Server");
             System.out.println("No target server specified. Defaulting to " + MCP.MCP_JAVA_SDK_SERVER + ":");
-            System.out.println("Command: " + command + " " + String.join(" ", commandArgs));
+            System.out.println("Command: " + command + " [using current classpath]");
         }
         System.out.println("-------------------------------------------------");
 
@@ -71,9 +88,18 @@ public class Client {
                 logger.info("[Server-Stderr] {}", line);
             });
 
-            // 3. Build the McpAsyncClient
+            // 3. Build the McpAsyncClient with sampling capabilities
+            ClientCapabilities clientCapabilities = ClientCapabilities.builder().sampling().build();
+
             client = McpClient.async(transport)
-                    .clientInfo(new McpSchema.Implementation(MCP.MCP_JAVA_SDK_CLIENT, MCP.MCP_VERSION)).build();
+                    .clientInfo(new McpSchema.Implementation(MCP.MCP_JAVA_SDK_CLIENT, MCP.MCP_VERSION))
+                    .capabilities(clientCapabilities).sampling(req -> {
+                        logger.info("Client received sampling request from server: {}", req);
+                        String userText = ((TextContent) req.messages().getLast().content()).text();
+                        return Mono.just(CreateMessageResult.builder().role(Role.ASSISTANT)
+                                .content(new TextContent("[mock LLM response] " + userText)).model("mock-model")
+                                .stopReason(StopReason.END_TURN).build());
+                    }).build();
 
             // 4. Initialize the connection
             System.out.println("Launching target MCP server and initializing session...");
@@ -143,6 +169,113 @@ public class Client {
             System.out.println("\n-------------------------------------------------");
             System.out.println("Tool demonstrations completed successfully.");
 
+            // 7. Query and dump resources
+            System.out.println("\nQuerying registered Resources from Server...");
+            ListResourcesResult resourcesResult = client.listResources().block();
+            List<Resource> resources = (resourcesResult != null) ? resourcesResult.resources() : new ArrayList<>();
+
+            System.out.println("\n--- DUMPED RESOURCES (" + resources.size() + ") ---");
+            for (Resource r : resources) {
+                System.out.println("\n[Resource] name: \"" + r.name() + "\"");
+                System.out.println("  uri: \"" + r.uri() + "\"");
+                System.out.println("  mimeType: \"" + r.mimeType() + "\"");
+                System.out.println("  description: \"" + r.description() + "\"");
+
+                // Read resource content
+                try {
+                    ReadResourceResult readResult = client.readResource(new ReadResourceRequest(r.uri())).block();
+                    if (readResult != null && !readResult.contents().isEmpty()) {
+                        String text = ((TextResourceContents) readResult.contents().getFirst()).text();
+                        System.out.println("  Content: " + (text.length() > 200 ? text.substring(0, 197) + "..." : text));
+                    }
+                } catch (Exception e) {
+                    System.out.println("  Error reading resource: " + e.getMessage());
+                }
+            }
+            System.out.println("-------------------------------------------------");
+
+            // 8. Query and dump resource templates
+            System.out.println("\nQuerying registered Resource Templates from Server...");
+            ListResourceTemplatesResult templatesResult = client.listResourceTemplates().block();
+            List<ResourceTemplate> templates = (templatesResult != null) ? templatesResult.resourceTemplates()
+                    : new ArrayList<>();
+
+            System.out.println("\n--- DUMPED RESOURCE TEMPLATES (" + templates.size() + ") ---");
+            for (ResourceTemplate t : templates) {
+                System.out.println("\n[Resource Template] name: \"" + t.name() + "\"");
+                System.out.println("  uriTemplate: \"" + t.uriTemplate() + "\"");
+                System.out.println("  mimeType: \"" + t.mimeType() + "\"");
+                System.out.println("  description: \"" + t.description() + "\"");
+            }
+
+            // Demonstrate reading from template instance
+            System.out.println("\nDemonstrating reading from a Resource Template instance...");
+            String templateInstanceUri = "mcp://poc/echo/Hello-From-Resource-Template";
+            System.out.println("Reading resource template instance: " + templateInstanceUri);
+            try {
+                ReadResourceResult readResult = client.readResource(new ReadResourceRequest(templateInstanceUri)).block();
+                if (readResult != null && !readResult.contents().isEmpty()) {
+                    String text = ((TextResourceContents) readResult.contents().getFirst()).text();
+                    System.out.println("  Response -> \"" + text + "\"");
+                }
+            } catch (Exception e) {
+                System.out.println("  Error reading template instance: " + e.getMessage());
+            }
+            System.out.println("-------------------------------------------------");
+
+            // 9. Query and dump prompts
+            System.out.println("\nQuerying registered Prompts from Server...");
+            ListPromptsResult promptsResult = client.listPrompts().block();
+            List<Prompt> prompts = (promptsResult != null) ? promptsResult.prompts() : new ArrayList<>();
+
+            System.out.println("\n--- DUMPED PROMPTS (" + prompts.size() + ") ---");
+            for (Prompt p : prompts) {
+                System.out.println("\n[Prompt] name: \"" + p.name() + "\"");
+                System.out.println("  description: \"" + p.description() + "\"");
+                System.out.println("  arguments: " + p.arguments());
+            }
+
+            // Demonstrate prompt execution
+            boolean hasSummarise = prompts.stream().anyMatch(p -> "summarise".equals(p.name()));
+            if (hasSummarise) {
+                System.out.println("\nCalling 'summarise' prompt template...");
+                try {
+                    GetPromptResult promptRes = client.getPrompt(new GetPromptRequest("summarise", Map.of("text",
+                            "The Model Context Protocol (MCP) is an open standard that enables developers to build secure, bidirectional connections between their AI models and their data sources.",
+                            "points", "3"))).block();
+                    if (promptRes != null && !promptRes.messages().isEmpty()) {
+                        System.out.println("  Prompt Description: " + promptRes.description());
+                        for (PromptMessage msg : promptRes.messages()) {
+                            System.out.println("  [" + msg.role() + "] Content: " + ((TextContent) msg.content()).text());
+                        }
+                    }
+                } catch (Exception e) {
+                    System.out.println("  Error calling prompt: " + e.getMessage());
+                }
+            }
+            System.out.println("-------------------------------------------------");
+
+            // 10. Demonstrate Sampling via 'llm_expand' tool
+            boolean hasLlmExpand = tools.stream().anyMatch(t -> "llm_expand".equals(t.name()));
+            if (hasLlmExpand) {
+                System.out.println("\n--- DEMONSTRATING SAMPLING (via 'llm_expand' tool) ---");
+                System.out.println(
+                        "Calling 'llm_expand' tool, which requires the server to call back to the client for LLM sampling...");
+                try {
+                    CallToolResult expandRes = client.callTool(new CallToolRequest("llm_expand",
+                            Map.of("phrase", "Model Context Protocol simplifies integrations"))).block();
+                    if (expandRes != null && !expandRes.isError() && !expandRes.content().isEmpty()) {
+                        String text = ((TextContent) expandRes.content().getFirst()).text();
+                        System.out.println("  Expanded Response -> \"" + text + "\"");
+                    } else {
+                        System.out.println("  Response -> Error: " + (expandRes != null ? expandRes.isError() : "null"));
+                    }
+                } catch (Exception e) {
+                    System.out.println("  Error calling llm_expand: " + e.getMessage());
+                }
+                System.out.println("-------------------------------------------------");
+            }
+
         } catch (Exception e) {
             System.err.println("\nAn error occurred in MCP Client: " + e.getMessage());
             logger.error("Error in MCP Client", e);
@@ -158,5 +291,5 @@ public class Client {
             System.out.println("=================================================");
         }
     }
-    
+
 }
