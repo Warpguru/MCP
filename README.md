@@ -53,9 +53,49 @@ This will output the name and version of the loaded MCP schema implementation an
 
 ### Test with MCP Inspector
 
+This command uses `npx` to download and run the latest [MCP Inspector](https://modelcontextprotocol.io/docs/2026-07-28/tools/inspector/web), which spawns the server as a child process and opens an [interactive browser UI](http://localhost:6274?MCP_INSPECTOR_API_TOKEN=8a4a2505d7b6151d0c3f846268860bad481f9c2d8edbf09523ad2cb34dc57597) for browsing and invoking its Tools, Resources, and Prompts.
+
 ```bash
 npx @modelcontextprotocol/inspector@latest java -cp target/MCP-1.0.0.jar edu.java.service.Server
 ```
+
+### MCP Server
+
+This JSON snippet registers the server as a local MCP plugin inside IBM **Bob IDE** (or any other MCP-compatible host), instructing it to launch the fat-JAR via the specified Java executable whenever the `mcp-test` server connection is needed.
+
+```json
+{
+  "mcpServers": {
+    "mcp-test": {
+      "command": "X:\\Path\\Java\\Java21\\bin\\java.exe",
+      "args": [
+        "-jar",
+        "X:\\Path\\MCP\\target\\MCP-1.0.0.jar",
+        "server"
+      ],
+      "disabled": false
+    }
+  }
+}
+```
+
+### Compatibility
+
+> *Researched on 2026-08-20. MCP host support is evolving rapidly; verify against the latest release notes of each tool.*
+
+Not all MCP hosts implement the full specification. The table below documents which of the four MCP primitives/capabilities are supported by commonly used AI coding hosts and inspection tools.
+
+| Host | MCP Primitive: Tools | MCP Primitive: Resources | MCP Primitive: Prompts | MCP Capability: Sampling |
+|---|:---:|:---:|:---:|:---:|
+| **IBM Bob** | ✅ | ✅ | ❌ | ❌ |
+| **Claude Desktop** | ✅ | ✅ | ✅ | ✅ |
+| **Claude Code** | ✅ | ✅ | ✅ | ❌ |
+| **OpenAI Codex CLI** | ✅ | ❌ | ❌ | ❌ |
+| **GitHub Copilot (VS Code)** | ✅ | ❌ | ❌ | ❌ |
+| **MCP Inspector** | ✅ | ✅ | ✅ | ❌ |
+| **This project's Java Client** | ✅ | ✅ | ✅ | ✅* |
+
+> \* The Java Client in this project can declare sampling capabilities in the handshake, making it one of the few clients capable of exercising the full Sampling flow end-to-end (see `llm_expand`).
 
 ---
 
