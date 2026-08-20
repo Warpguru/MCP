@@ -9,14 +9,10 @@ import org.apache.logging.log4j.Logger;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import edu.java.MCP;
 import edu.java.util.SchemaBuilder;
-import io.modelcontextprotocol.server.McpAsyncServer;
-import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncPromptSpecification;
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncResourceSpecification;
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification;
-import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
@@ -28,134 +24,39 @@ import io.modelcontextprotocol.spec.McpSchema.Resource;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpSchema.Role;
 import io.modelcontextprotocol.spec.McpSchema.SamplingMessage;
-import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import reactor.core.publisher.Mono;
 
 /**
- * MCP Server implementation using the <a href="https://github.com/modelcontextprotocol/java-sdk">MCP Java SDK</a>.
- *
- * <p>
- * Demonstrates all three MCP primitives — Tools, Resources, and Prompts — plus the Sampling capability. Transport selection and
- * primitive registration are intentionally separated:
- * <ul>
- * <li>{@code processTransport*()} methods — each configures one specific MCP Transport (e.g. stdio, SSE) and then delegates to
- * {@link #buildServer}.</li>
- * <li>{@link #buildServer} — transport-agnostic: registers all primitives on the supplied transport provider, builds the
- * server, and blocks the calling thread.</li>
- * </ul>
- *
- * <p>
- * When using the stdio transport the server must never write to {@code System.out} directly; all diagnostic output goes through
- * the logger, which is configured to write to {@code System.err} and the log file.
+ * Abstract base class representing a generic MCP Server.
+ * Holds all shared MCP primitive factory methods, shared constants, Jackson ObjectMapper instance,
+ * and base properties such as the serverType and serverName to resolve small parameter differences.
  */
-public class Server {
+public abstract class Server {
 
-    /** Default logger (using appender that includes e.g. timestamp, ...). */
-    private static final Logger logger = LogManager.getLogger(Server.class);
+    /** Default logger resolved dynamically based on the concrete subclass name. */
+    protected final Logger logger = LogManager.getLogger(getClass());
 
-    /** Jackson object mapper instance. */
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    /** Shared Jackson object mapper instance. */
+    protected static final ObjectMapper objectMapper = new ObjectMapper();
 
-    // -------------------------------------------------------------------------
-    // Entry point
-    // -------------------------------------------------------------------------
+    /** The dynamic server name used for logging and Info resource descriptors. */
+    protected final String serverType;
 
-    /**
-     * Application entry point.
-     *
-     * <p>
-     * Instantiates the server and delegates to {@link #processTransportStdio()} so that the startup logic lives in an instance
-     * method rather than a static context. Any uncaught exception is logged and printed to {@code System.err} before the
-     * process exits with code {@code 1}.
-     *
-     * @param args command-line arguments (not used)
-     */
-    public static void main(String[] args) {
-        try {
-            new Server().processTransportStdio();
-        } catch (Exception e) {
-            logger.error("Fatal error starting " + MCP.MCP_JAVA_SDK_SERVER, e);
-            System.err.println("Fatal error: " + e.getMessage());
-            System.exit(1);
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Transport entry points
-    // -------------------------------------------------------------------------
+    /** The user-friendly resource display name. */
+    protected final String serverName;
 
     /**
-     * MCP Transport — stdio.
+     * Protected constructor initializing base properties.
      *
-     * <p>
-     * Configures a {@link StdioServerTransportProvider}, which reads JSON-RPC messages from {@code System.in} and writes
-     * responses to {@code System.out}. This transport is used when the MCP client launches the server as a child process on the
-     * same machine (e.g. IDE plugins, CLI tools).
-     *
-     * <p>
-     * Delegates all primitive registration and server startup to
-     * {@link #buildServer(io.modelcontextprotocol.spec.McpServerTransportProvider)}.
+     * @param serverType descriptor used inside the info resource content (e.g., "StdioServer" or "SseServer")
+     * @param serverName user-friendly name used for info resource naming (e.g., "StdioServer Info" or "SseServer Info")
      */
-    public void processTransportStdio() {
-        logger.info("Starting " + MCP.MCP_JAVA_SDK_SERVER + " over stdio transport...");
-        buildServer(new StdioServerTransportProvider());
-    }
-
-    // -------------------------------------------------------------------------
-    // Transport-agnostic server builder
-    // -------------------------------------------------------------------------
-
-    /**
-     * Registers all MCP primitives and starts the server on the given transport.
-     *
-     * <p>
-     * This method is intentionally transport-agnostic: it accepts any
-     * {@link io.modelcontextprotocol.spec.McpServerTransportProvider} so that a future {@code processTransportSse()} (or any
-     * other transport) can reuse the same primitive registrations without duplication.
-     *
-     * <p>
-     * After {@link McpAsyncServer} is built the method blocks the calling thread forever via {@code Mono.never()} so that the
-     * reactive background threads that handle I/O keep running.
-     *
-     * @param transportProvider the configured transport to attach the server to
-     */
-    private void buildServer(io.modelcontextprotocol.spec.McpServerTransportProvider transportProvider) {
-        ServerCapabilities capabilities = ServerCapabilities.builder().tools(true).resources(false, true).prompts(true).build();
-        // MCP Tools (standard)
-        AsyncToolSpecification toolEcho = createToolEcho();
-        AsyncToolSpecification toolAdd = createToolAdd();
-        AsyncToolSpecification toolCurrentTime = createToolCurrentTime();
-        // MCP Sampling (technically registered as a Tool, semantically a capability)
-        AsyncToolSpecification toolLlmExpand = createSamplingLlmExpand();
-        // MCP Resources (static, concrete URIs)
-        AsyncResourceSpecification resourceInfo = createResourceInfo();
-        AsyncResourceSpecification resourceSystemProperties = createResourceSystemProperties();
-        AsyncResourceSpecification resourceEchoHello = createResourceEchoHello();
-        AsyncResourceSpecification resourceEchoJunit = createResourceEchoJunit();
-        // MCP Resource Templates (URI patterns advertised to clients)
-        ResourceTemplate resourceTemplateEcho = createResourceTemplateEcho();
-        // MCP Prompts
-        AsyncPromptSpecification promptCodeReview = createPromptCodeReview();
-        AsyncPromptSpecification promptSummarise = createPromptSummarise();
-        //@formatter:off
-        @SuppressWarnings("unused")
-        McpAsyncServer server = McpServer
-            .async(transportProvider)
-            .serverInfo(MCP.MCP_JAVA_SDK_SERVER, MCP.MCP_VERSION)
-            .capabilities(capabilities)
-            .tools(toolEcho, toolAdd, toolCurrentTime, toolLlmExpand)
-            .resources(resourceInfo, resourceSystemProperties, resourceEchoHello, resourceEchoJunit)
-            .resourceTemplates(resourceTemplateEcho)
-            .prompts(promptCodeReview, promptSummarise)
-            .build();
-        //@formatter:on
-        logger.info(MCP.MCP_JAVA_SDK_SERVER + " started successfully.");
-        // Block the calling thread forever so the reactive transport threads keep running.
-        // Mono.never() is a Reactor idiom that produces a Mono that never emits or completes.
-        Mono.never().block();
+    protected Server(final String serverType, final String serverName) {
+        this.serverType = serverType;
+        this.serverName = serverName;
     }
 
     // -------------------------------------------------------------------------
@@ -171,7 +72,7 @@ public class Server {
      *
      * @return the fully configured {@link AsyncToolSpecification} ready for registration
      */
-    private AsyncToolSpecification createToolEcho() {
+    protected AsyncToolSpecification createToolEcho() {
         Tool tool = new Tool("echo", "[MCP Primitives:Tool] Echoes the provided message back to the caller.",
                 toJson(SchemaBuilder.singleStringParameter("message", "The text to echo back")));
         return new AsyncToolSpecification(tool, (exchange, arguments) -> {
@@ -191,7 +92,7 @@ public class Server {
      *
      * @return the fully configured {@link AsyncToolSpecification} ready for registration
      */
-    private AsyncToolSpecification createToolAdd() {
+    protected AsyncToolSpecification createToolAdd() {
         Tool tool = new Tool("add", "[MCP Primitives:Tool] Adds two integers and returns the sum.",
                 toJson(SchemaBuilder.objectSchema("Two integer operands",
                         Map.of("a", "First integer operand", "b", "Second integer operand"), List.of("a", "b"))));
@@ -212,12 +113,11 @@ public class Server {
      * MCP Tool — {@code current_time}.
      *
      * <p>
-     * Returns the current server UTC timestamp in ISO-8601 format (e.g. {@code 2025-06-01T12:00:00Z}). Accepts no parameters;
-     * the input schema is an empty JSON object.
+     * Time-query utility: returns the current server time in ISO-8601 UTC format. Accepts no parameters.
      *
      * @return the fully configured {@link AsyncToolSpecification} ready for registration
      */
-    private AsyncToolSpecification createToolCurrentTime() {
+    protected AsyncToolSpecification createToolCurrentTime() {
         Tool tool = new Tool("current_time",
                 "[MCP Primitives:Tool] Returns the current server date and time in ISO-8601 format.",
                 toJson(Map.of("type", "object", "properties", Map.of())));
@@ -228,35 +128,17 @@ public class Server {
         });
     }
 
-    // -------------------------------------------------------------------------
-    // Sampling factory method
-    // (Registered as a tool but semantically performs LLM sampling via the host)
-    // -------------------------------------------------------------------------
-
     /**
-     * MCP Sampling — {@code llm_expand} (registered as a Tool).
+     * MCP Sampling Capability wrapper — {@code llm_expand}.
      *
      * <p>
-     * Demonstrates the MCP <em>Sampling</em> capability: the server initiates a text-generation request back to the
-     * <em>client's</em> LLM rather than running any model itself. The flow is:
-     * <ol>
-     * <li>The client invokes this tool with a short {@code phrase}.</li>
-     * <li>The server builds a {@link CreateMessageRequest} and calls {@code exchange.createMessage(...)}, which sends a
-     * {@code sampling/createMessage} request back across the MCP connection to the client.</li>
-     * <li>The client's LLM (which assumes the MCP Client is part of LLM providers such as IBM Bob, Claude Code, Cline, ...)
-     * generates the expanded paragraph and returns it.</li>
-     * <li>The server wraps the generated text in a {@link CallToolResult} and returns it to the original caller.</li>
-     * </ol>
-     *
-     * <p>
-     * Sampling is technically registered as a Tool because the MCP protocol has no dedicated "sampling primitive" from the
-     * server's perspective — Sampling is a <em>capability</em> (a callback the server can make to the client), not a primitive
-     * the server exposes. The {@code createSampling*()} naming convention makes this semantic distinction visible in the code
-     * even though the SDK type is the same {@link AsyncToolSpecification}.
+     * Triggers a sampling round-trip back to the client. This method is registered as a Tool, but semantically wraps 
+     * an LLM text generation request. When invoked, it builds a {@link CreateMessageRequest} and calls 
+     * {@code exchange.createMessage(request)} to instruct the client's host LLM to expand the phrase.
      *
      * @return the fully configured {@link AsyncToolSpecification} ready for registration
      */
-    private AsyncToolSpecification createSamplingLlmExpand() {
+    protected AsyncToolSpecification createSamplingLlmExpand() {
         Tool tool = new Tool("llm_expand",
                 "[MCP Capability:Sampling] Asks the LLM to expand a short phrase into a full paragraph.",
                 toJson(SchemaBuilder.singleStringParameter("phrase", "The short phrase to expand")));
@@ -288,19 +170,18 @@ public class Server {
      * MCP Resource — {@code mcp://poc/info}.
      *
      * <p>
-     * Static informational resource that returns a short plain-text summary of this server: its name, the SDK it uses, and the
-     * running JVM version. The JVM version is read at request time via {@link System#getProperty} so it always reflects the
-     * actual runtime.
+     * Static informational resource: returns basic information about the running server, SDK name, and the active JVM 
+     * version resolved at request time. Served as {@code text/plain}.
      *
      * @return the fully configured {@link AsyncResourceSpecification} ready for registration
      */
-    private AsyncResourceSpecification createResourceInfo() {
-        Resource resource = new Resource("mcp://poc/info", "Server Info",
+    protected AsyncResourceSpecification createResourceInfo() {
+        Resource resource = new Resource("mcp://poc/info", serverName,
                 "[MCP Primitives:Resource] Return basic information about this MCP PoC server", "text/plain", null);
         return new AsyncResourceSpecification(resource, (exchange, request) -> {
             logger.info("Reading [MCP Primitives:Resource] 'mcp://poc/info'");
             return Mono.just(new ReadResourceResult(List.of(new TextResourceContents("mcp://poc/info", "text/plain",
-                    "MCP PoC Server\nSDK : MCP Java SDK\nJava: " + System.getProperty("java.version")))));
+                    "MCP PoC " + serverType + "\nSDK : MCP Java SDK\nJava: " + System.getProperty("java.version")))));
         });
     }
 
@@ -308,17 +189,12 @@ public class Server {
      * MCP Resource — {@code mcp://poc/system-properties}.
      *
      * <p>
-     * Returns all current JVM system properties serialised as a JSON object. Because {@link System#getProperties()} returns
-     * arbitrary strings that may contain backslashes, double-quotes, and newlines, those characters are escaped manually before
-     * embedding each value in the JSON string. The result is returned with MIME type {@code application/json}.
-     *
-     * <p>
-     * The read handler propagates any unexpected exception as a reactive error via {@code Mono.error(e)} so the SDK can
-     * translate it into a proper MCP error response rather than silently swallowing it.
+     * Server properties dump: dynamically gathers all active JVM system properties, maps them to a JSON object, and 
+     * escapes slashes and double quotes safely. Served as {@code application/json}.
      *
      * @return the fully configured {@link AsyncResourceSpecification} ready for registration
      */
-    private AsyncResourceSpecification createResourceSystemProperties() {
+    protected AsyncResourceSpecification createResourceSystemProperties() {
         Resource resource = new Resource("mcp://poc/system-properties", "System Properties",
                 "[MCP Primitives:Resource] Return all JVM system properties as JSON", "application/json", null);
         return new AsyncResourceSpecification(resource, (exchange, request) -> {
@@ -341,21 +217,15 @@ public class Server {
     }
 
     /**
-     * MCP Resource — {@code mcp://poc/echo/Hello-From-Resource-Template}.
+     * MCP Resource Template instance — {@code mcp://poc/echo/Hello-From-Resource-Template}.
      *
      * <p>
-     * A static resource whose URI intentionally conforms to the echo {@link ResourceTemplate} pattern
-     * ({@code mcp://poc/echo/{message}}). Its purpose is discoverability: by pre-registering this concrete URI the server
-     * exposes it via {@code resources/list}, allowing clients to find and read it without having to construct a URI themselves.
-     *
-     * <p>
-     * The read handler extracts the final path segment from the requested URI and echoes it back as plain text. This is the
-     * same logic used by {@link #createResourceEchoJunit()}, demonstrating that multiple static resources can share identical
-     * handler logic while differing only in their registered URI.
+     * Demonstration static resource representing an instantiated template pattern path. Extracts the message portion 
+     * and returns it as plain text.
      *
      * @return the fully configured {@link AsyncResourceSpecification} ready for registration
      */
-    private AsyncResourceSpecification createResourceEchoHello() {
+    protected AsyncResourceSpecification createResourceEchoHello() {
         Resource resource = new Resource("mcp://poc/echo/Hello-From-Resource-Template", "Echo Hello Resource",
                 "[MCP Primitives:Resource] Return static resource whose URI conforms to the echo resource template",
                 "text/plain", null);
@@ -369,16 +239,14 @@ public class Server {
     }
 
     /**
-     * MCP Resource — {@code mcp://poc/echo/junit-test}.
+     * MCP Resource Template instance — {@code mcp://poc/echo/junit-test}.
      *
      * <p>
-     * A static resource used by the JUnit integration test ({@code McpIntegrationTest}) to verify that the server correctly
-     * handles {@code resources/read} requests. Like {@link #createResourceEchoHello()}, its URI conforms to the echo
-     * {@link ResourceTemplate} pattern, and its read handler echoes back the final path segment as plain text.
+     * Special mock template instance pre-registered specifically for the JUnit end-to-end integration test.
      *
      * @return the fully configured {@link AsyncResourceSpecification} ready for registration
      */
-    private AsyncResourceSpecification createResourceEchoJunit() {
+    protected AsyncResourceSpecification createResourceEchoJunit() {
         Resource resource = new Resource("mcp://poc/echo/junit-test", "Echo Junit Resource",
                 "[MCP Primitives:Resource] Return static resource whose URI conforms to the echo resource template, used in Junit tests",
                 "text/plain", null);
@@ -395,19 +263,12 @@ public class Server {
      * MCP Resource Template — {@code mcp://poc/echo/{message}}.
      *
      * <p>
-     * Advertises to clients that this server understands URIs matching the pattern {@code mcp://poc/echo/{message}}, where
-     * {@code {message}} is any string value. This advertisement appears in the {@code resourceTemplates/list} response.
+     * Advertises support for the dynamic echo resource template. This serves as metadata only; actual routing and retrieval 
+     * is resolved via exact pre-registered URI specifications in this SDK version.
      *
-     * <p>
-     * <strong>Important:</strong> a {@link ResourceTemplate} is metadata only — it carries no read handler. The SDK routes
-     * {@code resources/read} requests by exact URI lookup in the registered {@link AsyncResourceSpecification} map, not by
-     * template pattern matching. In SDK 0.9.0 only the two pre-registered concrete URIs ({@code Hello-From-Resource-Template}
-     * and {@code junit-test}) can actually be read. Any other URI matching this pattern would result in a "resource not found"
-     * error from the SDK.
-     *
-     * @return the {@link ResourceTemplate} metadata object ready for registration
+     * @return the fully configured {@link ResourceTemplate} ready for advertisement
      */
-    private ResourceTemplate createResourceTemplateEcho() {
+    protected ResourceTemplate createResourceTemplateEcho() {
         return new ResourceTemplate("mcp://poc/echo/{message}", "Echo Resource",
                 "[MCP Primitives:Resource] Returns the {message} portion of the URI as plain text", "text/plain", null);
     }
@@ -420,23 +281,12 @@ public class Server {
      * MCP Prompt — {@code code_review}.
      *
      * <p>
-     * Returns a two-message prompt that instructs the LLM to review a code snippet. The prompt handler accepts two required
-     * arguments:
-     * <ul>
-     * <li>{@code language} — the programming language (e.g. {@code Java})</li>
-     * <li>{@code code} — the source code to review</li>
-     * </ul>
-     * The handler builds a system-role message that sets the reviewer persona and a user-role message that wraps the code in a
-     * fenced code block. Both messages are returned as {@link Role#USER} because the MCP Prompt primitive only defines message
-     * content — it is the client's responsibility to assign system vs. user roles when forwarding the messages to its LLM.
-     *
-     * <p>
-     * If the {@code arguments} map is {@code null} (the client sent no arguments), sensible defaults ({@code "unknown"} / empty
-     * string) are used so the handler never throws a {@code NullPointerException}.
+     * Code review prompt generator: accepts required arguments {@code language} and {@code code}. Returns a multi-message 
+     * prompt instructing the host LLM to review the provided snippet for style, correctness, and security.
      *
      * @return the fully configured {@link AsyncPromptSpecification} ready for registration
      */
-    private AsyncPromptSpecification createPromptCodeReview() {
+    protected AsyncPromptSpecification createPromptCodeReview() {
         Prompt prompt = new Prompt("code_review", "[MCP Primitives:Prompt] Ask the LLM to review a code snippet",
                 List.of(new PromptArgument("language", "Programming language", true),
                         new PromptArgument("code", "The code to review", true)));
@@ -458,18 +308,13 @@ public class Server {
      * MCP Prompt — {@code summarise}.
      *
      * <p>
-     * Returns a single-message prompt that asks the LLM to summarise a block of text into a given number of bullet points.
-     * Accepts two arguments:
-     * <ul>
-     * <li>{@code text} (required) — the text to summarise</li>
-     * <li>{@code points} (optional, default {@code "5"}) — number of bullet points</li>
-     * </ul>
-     * The optional {@code points} argument defaults to {@code "5"} when absent, which is handled defensively: both a
-     * {@code null} map and a missing key produce the default via {@code getOrDefault}.
+     * Summarisation prompt generator: accepts required argument {@code text} and optional argument {@code points} 
+     * (which defaults to {@code "5"}). Formulates a single system prompt message asking the host LLM to break the text 
+     * down into concise bullet points.
      *
      * @return the fully configured {@link AsyncPromptSpecification} ready for registration
      */
-    private AsyncPromptSpecification createPromptSummarise() {
+    protected AsyncPromptSpecification createPromptSummarise() {
         Prompt prompt = new Prompt("summarise",
                 "[MCP Primitives:Prompt] Summarise a block of text in a given number of bullet points",
                 List.of(new PromptArgument("text", "Text to summarise", true),
@@ -487,11 +332,8 @@ public class Server {
 
     /**
      * Helper to convert {@link Map} to {@code Json} format.
-     * 
-     * @param map to convert
-     * @return {@link String}
      */
-    private String toJson(final Map<String, Object> map) {
+    protected String toJson(final Map<String, Object> map) {
         try {
             return objectMapper.writeValueAsString(map);
         } catch (Exception e) {

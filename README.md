@@ -43,35 +43,124 @@ mvn clean package
 
 ### Verify the Installation
 
-Run the packaged PoC executable to verify that the environment and core MCP classes load successfully:
+Run the launcher without any arguments to see the help text and verify that the core MCP SDK classes load successfully:
 
 ```bash
 java -jar target/MCP-1.0.0.jar
 ```
 
-This will output the name and version of the loaded MCP schema implementation and log the diagnostics to `MCP.log`.
+---
 
-### Test with MCP Inspector
+## Launcher & Transport Comparison
 
-This command uses `npx` to download and run the latest [MCP Inspector](https://modelcontextprotocol.io/docs/2026-07-28/tools/inspector/web), which spawns the server as a child process and opens an [interactive browser UI](http://localhost:6274?MCP_INSPECTOR_API_TOKEN=8a4a2505d7b6151d0c3f846268860bad481f9c2d8edbf09523ad2cb34dc57597) for browsing and invoking its Tools, Resources, and Prompts.
+The entry point `java -jar target/MCP-1.0.0.jar` routes to different components depending on the subcommand and arguments passed. Below is a detailed breakdown of how standard stdio and streamable HTTP+SSE implementations differ.
+
+### Comparison Table
+
+| Attribute | `stdioserver` Subcommand | `sseserver` Subcommand | `client` Subcommand |
+| :--- | :--- | :--- | :--- |
+| **Primary Role** | Local Server (Stdio) | Independent Network Server (SSE) | Diagnostic Universal Client |
+| **How to Launch** | Spawned as a background child process by an MCP host. | Started manually in a console window or background daemon. | Executed as a CLI tool to query capabilities of a target server. |
+| **Parameters Accepted**| None (ignores arguments). | None (ignores arguments). | Dynamic based on chosen client mode (see below). |
+| **Connection Port** | None (uses process stream redirection on `stdin`/`stdout`). | Binds to local loopback interface `127.0.0.1:8080`. | Network connection to port `8080` (SSE) OR launches a child process (stdio). |
+| **Lifecycle** | Interlocked with the host (auto-terminates when host exits). | Persistent (must be stopped manually using `Ctrl+C`). | Ephemeral (completes handshake, prints diagnostic dump, and exits). |
+| **Output Streams** | Writes to `System.err` and `MCP.log`. `stdout` is reserved for JSON-RPC. | Writes directly to console output streams and `MCP.log`. | Prints rich diagnostic matrices directly to console output. |
+
+---
+
+## Starting the Servers
+
+### 1. Launch MCP Server over Stdio
+Designed to run purely as an embedded subprocess. **Never launch this manually to interact with it directly**, as your terminal keystrokes will corrupt the JSON-RPC stream framing.
 
 ```bash
-npx @modelcontextprotocol/inspector@latest java -cp target/MCP-1.0.0.jar edu.java.service.Server
+java -jar target/MCP-1.0.0.jar stdioserver
 ```
 
-### MCP Server
+### 2. Launch MCP Server over Server-Sent Events (SSE)
+Launches a standalone Reactor Netty server on local port `8080`. Excellent for remote integrations, multi-client browsing, or local inspection.
 
-This JSON snippet registers the server as a local MCP plugin inside IBM **Bob IDE** (or any other MCP-compatible host), instructing it to launch the fat-JAR via the specified Java executable whenever the `mcp-test` server connection is needed.
+```bash
+java -jar target/MCP-1.0.0.jar sseserver
+```
+
+---
+
+## Using the Universal Diagnostic Client
+
+The client subcommand is highly versatile and supports two entirely separate syntax tracks depending on whether you want to connect to a local **Stdio server subprocess** or a remote **SSE server**.
+
+### Option 1: Local Stdio Server (Subprocess Mode)
+In this mode, the client launches an MCP server as a local child process and talks to it over stdin/stdout.
+
+```bash
+java -jar target/MCP-1.0.0.jar client [command] [args...]
+```
+
+#### Mode A: Internal Loopback (Omit All Parameters)
+If you run the client with **no arguments**, it automatically boots the internal StdioServer packaged inside the same fat JAR, establishes a direct loopback channel, queries all capabilities, runs demonstration echos, and prints the report.
+* **`[command]`**: Omitted.
+* **`[args...]`**: Omitted.
+
+```bash
+java -jar target/MCP-1.0.0.jar client
+```
+
+#### Mode B: Custom Stdio Subprocess (Provide Command)
+If you specify a command, the client will launch that program as a subprocess and handshake with it.
+* **`[command]`** (Required): The name or path of the executable program (e.g. `node`, `python`, or `java`).
+* **`[args...]`** (Optional): Additional arguments passed directly to that spawned program.
+
+```bash
+# Example: Spawns the StdioServer class explicitly as a custom subprocess
+java -jar target/MCP-1.0.0.jar client java -cp target/MCP-1.0.0.jar edu.java.service.StdioServer
+```
+
+---
+
+### Option 2: Remote SSE Server (Network Mode)
+In this mode, the client connects over the network to a running standalone HTTP+SSE server.
+
+```bash
+java -jar target/MCP-1.0.0.jar client sse [url]
+```
+
+#### Mode C: Remote SSE Handshake
+By providing the literal keyword `sse`, the client activates the reactive SSE transport instead of spawning a local process.
+* **`sse`** (Required Keyword): Instructs the client to use the `HttpClientSseClientTransport` layer.
+* **`[url]`** (Optional Parameter): The base HTTP URL of the server. **Defaults to `http://127.0.0.1:8080`** if omitted.
+
+```bash
+# Connect to the default local SSE Server (127.0.0.1:8080)
+java -jar target/MCP-1.0.0.jar client sse
+
+# Connect to an SSE Server running on a custom address/port
+java -jar target/MCP-1.0.0.jar client sse http://127.0.0.1:9090
+```
+
+---
+
+## Integrating with MCP Hosts
+
+### Test with MCP Inspector
+The official Node-based [MCP Inspector](https://modelcontextprotocol.io/docs/2026-07-28/tools/inspector/web) provides an interactive browser UI for debugging. Run it by pointing to the target Stdio class:
+
+```bash
+npx @modelcontextprotocol/inspector@latest java -cp target/MCP-1.0.0.jar edu.java.service.StdioServer
+```
+
+### Register Stdio in IBM Bob IDE
+To register the Stdio server inside your AI assistant / Bob host environment, insert this snippet into your host settings:
 
 ```json
 {
   "mcpServers": {
-    "mcp-test": {
+    "mcp-test-stdio": {
       "command": "X:\\Path\\Java\\Java21\\bin\\java.exe",
       "args": [
         "-jar",
         "X:\\Path\\MCP\\target\\MCP-1.0.0.jar",
-        "server"
+        "stdioserver"
       ],
       "disabled": false
     }
@@ -79,7 +168,24 @@ This JSON snippet registers the server as a local MCP plugin inside IBM **Bob ID
 }
 ```
 
-### Compatibility
+### Register SSE in IBM Bob IDE
+To register the standalone SSE server inside your assistant, ensure the `sseserver` is running, then add:
+
+```json
+{
+  "mcpServers": {
+    "mcp-test-sse": {
+      "url": "http://127.0.0.1:8080",
+      "disabled": false,
+      "alwaysAllow": []
+    }
+  }
+}
+```
+
+---
+
+## Compatibility
 
 > *Researched on 2026-08-20. MCP host support is evolving rapidly; verify against the latest release notes of each tool.*
 
@@ -99,9 +205,15 @@ Not all MCP hosts implement the full specification. The table below documents wh
 
 ---
 
+## Technical Documentation
+
+This section provides deep technical overviews of the two available transport layers in this project: the **stdio transport** and the **HTTP+SSE transport**.
+
+---
+
 ## Technical Documentation — stdio Transport
 
-This section documents the current implementation: the MCP server running over the **stdio transport**. Other transports (SSE/HTTP) will be documented when implemented.
+This section documents the MCP server running over the **stdio transport**.
 
 ---
 
@@ -150,7 +262,7 @@ sequenceDiagram
     participant Host as Host / MCP Client
     participant Server as MCP Server (child process)
 
-    Host->>Server: spawn process (java -jar MCP-1.0.0.jar server)
+    Host->>Server: spawn process (java -jar MCP-1.0.0.jar stdioserver)
     Host->>Server: stdin ← {"jsonrpc":"2.0","method":"initialize",...}
     Server->>Host: stdout → {"jsonrpc":"2.0","result":{"serverInfo":...}}
     Note over Host,Server: Handshake complete — session established
@@ -178,11 +290,9 @@ A deliberate design decision separates transport selection from primitive regist
 
 ```mermaid
 flowchart TD
-    main["Server.main()"]
+    main["StdioServer.main()"]
     main --> pStdio["processTransportStdio()\nConfigures StdioServerTransportProvider"]
     pStdio --> build["buildServer(transportProvider)\nRegisters all primitives\nBuilds McpAsyncServer\nBlocks on Mono.never()"]
-    pSse["processTransportSse()\nnot yet implemented"]:::future --> build
-    classDef future fill:#f5f5f5,stroke:#bbb,color:#999
 ```
 
 This means adding a new transport in the future requires only a new `processTransport*()` method — the primitive registration in `buildServer()` is reused unchanged.
@@ -314,3 +424,78 @@ Mono.never().block();
 ```
 
 The server's main thread is parked on `Mono.never().block()` at the end of `buildServer()`. This is intentional: the stdio transport runs on background threads managed by Reactor. If `main()` were to return, those threads would be torn down and the server would exit.
+
+---
+
+## Technical Documentation — sse Transport
+
+The **Server-Sent Events (SSE/HTTP) transport** runs as a standalone network web server over HTTP. Unlike stdio, it operates over TCP/IP, allowing multiple network clients to connect simultaneously and permitting the server to run in a decoupled, containerized, or remote network environment.
+
+---
+
+### SSE Transport Architecture
+
+The HTTP+SSE transport establishes a persistent unidirectional channel where the server pushes events to the client, and a separate POST endpoint for client-to-server messages:
+
+1. **GET `/sse` (Server-Sent Events Stream):** The client (e.g., Bob) establishes a persistent network connection. The server pushes event stream packets (including the assigned `session ID` and the target message endpoint) to the client.
+2. **POST `/message` (Client-to-Server Messages):** The client sends JSON-RPC 2.0 requests as HTTP POST request bodies to execute tools, read resources, or fetch prompt templates.
+
+```mermaid
+sequenceDiagram
+    participant Host as Host / MCP Client (e.g. Bob)
+    participant Server as MCP SSE Server
+
+    Note over Host,Server: Server is started manually on port 8080
+    Host->>Server: HTTP GET http://127.0.0.1:8080/sse
+    Server-->>Host: Establish SSE Event Stream
+    Note over Host,Server: Handshake complete — session established
+
+    Host->>Server: HTTP POST http://127.0.0.1:8080/message (JSON-RPC)
+    Server-->>Host: (via SSE stream) JSON-RPC Response
+```
+
+---
+
+### Lifecycle and Localhost Constraints
+
+Unlike the stdio transport (which automatically spawns and kills the server process on-demand), the SSE server operates independently:
+* **Manual Lifecycle Management:** The server must be manually started (via `java -jar target/MCP-1.0.0.jar sseserver`) before any client attempts to connect, and must be manually terminated (via `Ctrl+C` or a process signal).
+* **Strict Security Constraints:** To adhere to local security guidelines outlined in `security.md`, `SseServer.java` binds strictly to the local loopback address `127.0.0.1` and listens on port `8080`. It never binds to `0.0.0.0` (all interfaces) to protect the server's tools and environment from unauthorized network exposure.
+
+---
+
+### Code Structure (SseServer)
+
+`SseServer.java` is structured with the exact same separation of concerns as StdioServer, reusing the exact same primitive factory methods to ensure **100% feature parity** and simplify maintenance:
+
+```mermaid
+flowchart TD
+    main["SseServer.main()"]
+    main --> pSse["processTransportSse()\nConfigures WebFluxSseServerTransportProvider"]
+    pSse --> build["buildServer()\nRegisters all specifications\nBuilds McpAsyncServer\nBinds Netty HttpServer to 127.0.0.1:8080"]
+```
+
+#### Registered primitives over SSE:
+* **Tools:** `echo`, `add`, `current_time`
+* **Resources:** `info` (labeled as SseServer), `system-properties`, `echo` (template instance), `junit-test` (template instance)
+* **Resource Templates:** `mcp://poc/echo/{message}`
+* **Prompts:** `code_review`, `summarise`
+* **Sampling:** Supported via the `llm_expand` tool, which triggers a `sampling/createMessage` request sent as an SSE packet back to the connected client for text generation.
+
+---
+
+### Bob Client Configuration (SSE)
+
+To register this SSE server inside Bob's MCP configuration, use the `"sse"` transport configuration type and point to the base URL (which hosts `/sse` and `/message` under the hood):
+
+```json
+{
+  "mcpServers": {
+    "mcp-poc-sse": {
+      "url": "http://127.0.0.1:8080",
+      "disabled": false,
+      "alwaysAllow": []
+    }
+  }
+}
+```
