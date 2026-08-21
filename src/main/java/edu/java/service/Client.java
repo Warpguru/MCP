@@ -9,9 +9,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import edu.java.MCP;
+import edu.java.service.StreamableSseServer;
 import io.modelcontextprotocol.client.McpAsyncClient;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
+import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -54,13 +56,16 @@ public class Client {
         System.out.println("=================================================");
 
         boolean useSse = false;
+        boolean useStreamable = false;
         /** SSE MCP Server address (typically http://127.0.0.1:8080). */;
         String sseUrl = SseServer.SSE_SERVER;
+        /** Streamable HTTP MCP Server address (typically http://127.0.0.1:8081). */
+        String streamableUrl = StreamableSseServer.STREAMABLE_SERVER;
 
         String command = "";
         List<String> commandArgs = new ArrayList<>();
 
-        // If arguments are provided, determine if it's SSE or Stdio.
+        // If arguments are provided, determine if it's SSE, Streamable HTTP, or Stdio.
         if (args.length > 0) {
             if ("sse".equalsIgnoreCase(args[0])) {
                 useSse = true;
@@ -69,6 +74,13 @@ public class Client {
                 }
                 System.out.println("Configuring client to connect to remote " + MCP.MCP_JAVA_SDK_SSE_SERVER + ":");
                 System.out.println("SSE Endpoint URL: " + sseUrl);
+            } else if ("streamable".equalsIgnoreCase(args[0])) {
+                useStreamable = true;
+                if (args.length > 1) {
+                    streamableUrl = args[1];
+                }
+                System.out.println("Configuring client to connect to remote " + MCP.MCP_JAVA_SDK_STREAMABLE_SERVER + ":");
+                System.out.println("Streamable HTTP Base URL: " + streamableUrl);
             } else {
                 command = args[0];
                 if (args.length > 1) {
@@ -97,6 +109,10 @@ public class Client {
                 @SuppressWarnings("removal")
                 HttpClientSseClientTransport sseTransport = new HttpClientSseClientTransport(sseUrl);
                 transport = sseTransport;
+            } else if (useStreamable) {
+                // 1 & 2. Initialize the Streamable HTTP Client Transport
+                transport = HttpClientStreamableHttpTransport.builder(streamableUrl)
+                        .endpoint(StreamableSseServer.STREAMABLE_ENDPOINT).build();
             } else {
                 // 1. Configure the server parameters
                 ServerParameters params = ServerParameters.builder(command).args(commandArgs).build();

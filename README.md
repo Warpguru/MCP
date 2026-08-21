@@ -9,7 +9,7 @@ Welcome to the **MCP Java SDK Tutorial** repository! This project serves as a co
 The primary objective of this project is to provide a complete, hands-on tutorial for building, running, and diagnosing Model Context Protocol (MCP) components in a native Java environment. The project explores the full potential of the official Java MCP SDK through two primary deliverables:
 
 1. **A Compliant MCP Server**:
-   A robust, standard-compliant MCP server that exposes the four core MCP primitives: **Tools**, **Resources**, **Prompts**, and **Sampling**. The tutorial guides you through wrapping these primitives in standard I/O (stdio) or streamable HTTP/SSE transports, demonstrating how LLMs and host clients can securely interoperate with Java-based backend services.
+   A robust, standard-compliant MCP server that exposes the four core MCP primitives: **Tools**, **Resources**, **Prompts**, and **Sampling**. The tutorial guides you through wrapping these primitives in **three** independent transport layers — standard I/O (stdio), legacy HTTP+SSE, and modern Streamable HTTP — demonstrating how LLMs and host clients can securely interoperate with Java-based backend services.
 
 2. **A Universal MCP Client (Feature Dumper)**:
    A native Java MCP client designed to connect to the tutorial's server, or **any other compliant MCP server**. Once connected, this client queries and dumps all available capabilities, tools, resources, and prompts exposed by the target server into a clean, structured diagnostic report. This "Feature Dumper" client acts as an essential inspection tool, similar to the Node-based MCP Inspector, but fully native to Java.
@@ -53,18 +53,20 @@ java -jar target/MCP-1.0.0.jar
 
 ## Launcher & Transport Comparison
 
-The entry point `java -jar target/MCP-1.0.0.jar` routes to different components depending on the subcommand and arguments passed. Below is a detailed breakdown of how standard stdio and streamable HTTP+SSE implementations differ.
+The entry point `java -jar target/MCP-1.0.0.jar` routes to different components depending on the subcommand and arguments passed. Below is a detailed breakdown of how the three server transports and the client differ.
 
 ### Comparison Table
 
-| Attribute | `stdioserver` Subcommand | `sseserver` Subcommand | `client` Subcommand |
-| :--- | :--- | :--- | :--- |
-| **Primary Role** | Local Server (Stdio) | Independent Network Server (SSE) | Diagnostic Universal Client |
-| **How to Launch** | Spawned as a background child process by an MCP host. | Started manually in a console window or background daemon. | Executed as a CLI tool to query capabilities of a target server. |
-| **Parameters Accepted**| None (ignores arguments). | None (ignores arguments). | Dynamic based on chosen client mode (see below). |
-| **Connection Port** | None (uses process stream redirection on `stdin`/`stdout`). | Binds to local loopback interface `127.0.0.1:8080`. | Network connection to port `8080` (SSE) OR launches a child process (stdio). |
-| **Lifecycle** | Interlocked with the host (auto-terminates when host exits). | Persistent (must be stopped manually using `Ctrl+C`). | Ephemeral (completes handshake, prints diagnostic dump, and exits). |
-| **Output Streams** | Writes to `System.err` and `MCP.log`. `stdout` is reserved for JSON-RPC. | Writes directly to console output streams and `MCP.log`. | Prints rich diagnostic matrices directly to console output. |
+| Attribute | `stdioserver` | `sseserver` | `streamableserver` | `client` |
+| :--- | :--- | :--- | :--- | :--- |
+| **Primary Role** | Local Server (Stdio) | Network Server (SSE) | Network Server (Streamable HTTP) | Diagnostic Universal Client |
+| **How to Launch** | Spawned as a child process by an MCP host. | Started manually or as a background daemon. | Started manually or as a background daemon. | Executed as a CLI tool to query capabilities. |
+| **Parameters Accepted** | None. | None. | None. | Dynamic based on chosen client mode (see below). |
+| **Connection Port** | None — uses `stdin`/`stdout` stream redirection. | Binds to `127.0.0.1:8080`. | Binds to `127.0.0.1:8081`. | Connects to port `8080` (SSE), `8081` (Streamable), or launches a child process (stdio). |
+| **MCP Spec** | 2024-11-05 | 2024-11-05 | **2025-03-26** | Adapts to the connected server. |
+| **Endpoints** | `stdin` / `stdout` | `GET /sse`, `POST /message` | `GET /mcp`, `POST /mcp` (unified) | N/A |
+| **Lifecycle** | Interlocked with the host (auto-terminates when host exits). | Persistent (must be stopped manually with `Ctrl+C`). | Persistent (must be stopped manually with `Ctrl+C`). | Ephemeral (prints diagnostic dump and exits). |
+| **Output Streams** | All output via Log4j2: startup banner → `stdout`, WARN+ logs → `stderr`, all levels → `MCP.log`. `stdout` is otherwise reserved exclusively for JSON-RPC. | All output via Log4j2: startup banner → `stdout`, WARN+ logs → `stderr`, all levels → `MCP.log`. | All output via Log4j2: startup banner → `stdout`, WARN+ logs → `stderr`, all levels → `MCP.log`. | Diagnostic dump via `System.out.println` directly to `stdout`. |
 
 ---
 
@@ -78,17 +80,24 @@ java -jar target/MCP-1.0.0.jar stdioserver
 ```
 
 ### 2. Launch MCP Server over Server-Sent Events (SSE)
-Launches a standalone Reactor Netty server on local port `8080`. Excellent for remote integrations, multi-client browsing, or local inspection.
+Launches a standalone Reactor Netty server on local port `8080`. Uses the **legacy MCP Spec 2024-11-05** two-endpoint model.
 
 ```bash
 java -jar target/MCP-1.0.0.jar sseserver
+```
+
+### 3. Launch MCP Server over Streamable HTTP
+Launches a standalone Reactor Netty server on local port `8081`. Uses the **modern MCP Spec 2025-03-26** single-endpoint model. This is the recommended transport for new integrations.
+
+```bash
+java -jar target/MCP-1.0.0.jar streamableserver
 ```
 
 ---
 
 ## Using the Universal Diagnostic Client
 
-The client subcommand is highly versatile and supports two entirely separate syntax tracks depending on whether you want to connect to a local **Stdio server subprocess** or a remote **SSE server**.
+The client subcommand supports three entirely separate syntax tracks depending on whether you want to connect to a local **Stdio server subprocess**, a remote **SSE server**, or a remote **Streamable HTTP server**.
 
 ### Option 1: Local Stdio Server (Subprocess Mode)
 In this mode, the client launches an MCP server as a local child process and talks to it over stdin/stdout.
@@ -107,13 +116,19 @@ java -jar target/MCP-1.0.0.jar client
 ```
 
 #### Mode B: Custom Stdio Subprocess (Provide Command)
-If you specify a command, the client will launch that program as a subprocess and handshake with it.
-* **`[command]`** (Required): The name or path of the executable program (e.g. `node`, `python`, or `java`).
-* **`[args...]`** (Optional): Additional arguments passed directly to that spawned program.
+If you specify a command, the client spawns `[command] [args...]` as a child process and handshakes with it over that process's `stdin`/`stdout`. The child must be a compliant MCP server that speaks the stdio transport.
+* **`[command]`** (Required): The interpreter or runtime executable to launch (e.g. `node`, `python`, `java`). This is only the launcher — on its own it is not an MCP server. You must also supply the script or JAR to run via `[args...]`.
+* **`[args...]`** (Required in practice): The script, JAR, or class name — plus any flags — passed to the launcher. Together with `[command]` these form the full subprocess command line.
 
 ```bash
-# Example: Spawns the StdioServer class explicitly as a custom subprocess
+# Spawns our own StdioServer class explicitly as a custom subprocess
 java -jar target/MCP-1.0.0.jar client java -cp target/MCP-1.0.0.jar edu.java.service.StdioServer
+
+# Spawns an external Node.js MCP server
+java -jar target/MCP-1.0.0.jar client node /path/to/mcp-server.js
+
+# Spawns an external Python MCP server
+java -jar target/MCP-1.0.0.jar client python /path/to/mcp_server.py
 ```
 
 ---
@@ -126,9 +141,9 @@ java -jar target/MCP-1.0.0.jar client sse [url]
 ```
 
 #### Mode C: Remote SSE Handshake
-By providing the literal keyword `sse`, the client activates the reactive SSE transport instead of spawning a local process.
+By providing the literal keyword `sse`, the client activates the legacy SSE transport instead of spawning a local process.
 * **`sse`** (Required Keyword): Instructs the client to use the `HttpClientSseClientTransport` layer.
-* **`[url]`** (Optional Parameter): The base HTTP URL of the server. **Defaults to `http://127.0.0.1:8080`** if omitted.
+* **`[url]`** (Optional Parameter): The **base** URL — `scheme://host:port` with **no path**. **Defaults to `http://127.0.0.1:8080`** if omitted. The transport hardcodes `/sse` as the connection path and negotiates the message endpoint dynamically from the server's SSE `endpoint` event. Passing a URL that already contains a path (e.g. `http://host:8080/sse`) would cause the transport to connect to `http://host:8080/sse/sse` — which is wrong.
 
 ```bash
 # Connect to the default local SSE Server (127.0.0.1:8080)
@@ -136,6 +151,28 @@ java -jar target/MCP-1.0.0.jar client sse
 
 # Connect to an SSE Server running on a custom address/port
 java -jar target/MCP-1.0.0.jar client sse http://127.0.0.1:9090
+```
+
+---
+
+### Option 3: Remote Streamable HTTP Server (Network Mode)
+In this mode, the client connects over the network to a running standalone Streamable HTTP server (MCP Spec 2025-03-26).
+
+```bash
+java -jar target/MCP-1.0.0.jar client streamable [url]
+```
+
+#### Mode D: Remote Streamable HTTP Handshake
+By providing the literal keyword `streamable`, the client activates the modern Streamable HTTP transport.
+* **`streamable`** (Required Keyword): Instructs the client to use the `HttpClientStreamableHttpTransport` layer.
+* **`[url]`** (Optional Parameter): The **base** URL — `scheme://host:port` with **no path**. **Defaults to `http://127.0.0.1:8081`** if omitted. The `/mcp` endpoint path is appended automatically by the transport builder (`.endpoint("/mcp")`). Passing a URL that already contains a path (e.g. `http://host:8081/mcp`) would cause the transport to resolve to `http://host:8081/mcp/mcp` — which is wrong.
+
+```bash
+# Connect to the default local Streamable HTTP Server (127.0.0.1:8081)
+java -jar target/MCP-1.0.0.jar client streamable
+
+# Connect to a Streamable HTTP Server running on a custom address/port
+java -jar target/MCP-1.0.0.jar client streamable http://127.0.0.1:9091
 ```
 
 ---
@@ -183,6 +220,28 @@ To register the standalone SSE server inside your assistant, ensure the `sseserv
   "mcpServers": {
     "mcp-test-sse": {
       "url": "http://127.0.0.1:8080/sse",
+      "cwd": "D:\\Workspace WCA\\MCP",
+      "disabled": false,
+      "alwaysAllow": [
+        "echo",
+        "add",
+        "current_time",
+        "llm_expand"
+      ]
+    }
+  }
+}
+```
+
+### Register Streamable HTTP in IBM Bob IDE
+To register the standalone Streamable HTTP server inside your assistant, ensure the `streamableserver` is running, then add:
+
+```json
+{
+  "mcpServers": {
+    "mcp-test-streamable": {
+      "url": "http://127.0.0.1:8081/mcp",
+      "cwd": "D:\\Workspace WCA\\MCP",
       "disabled": false,
       "alwaysAllow": [
         "echo",
@@ -219,7 +278,7 @@ Not all MCP hosts implement the full specification. The table below documents wh
 
 ## Technical Documentation
 
-This section provides deep technical overviews of the two available transport layers in this project: the **stdio transport** and the **HTTP+SSE transport**.
+This section provides deep technical overviews of the three available transport layers in this project: the **stdio transport**, the **HTTP+SSE transport**, and the **Streamable HTTP transport**.
 
 ---
 
@@ -382,7 +441,7 @@ A Resource Template is **metadata only** — it advertises a URI pattern to clie
 |---|---|
 | `mcp://poc/echo/{message}` | Advertises that the server understands this URI shape. In SDK 0.9.0 only the two pre-registered concrete URIs can actually be read; the template itself performs no routing. |
 
-> **Note:** In MCP Java SDK 0.9.0, `resources/read` is routed by **exact URI lookup** — not by template pattern matching. A `ResourceTemplate` is purely an advertisement.
+> **Note:** In MCP Java SDK 0.11.0, `resources/read` is routed by **exact URI lookup** — not by template pattern matching. A `ResourceTemplate` is purely an advertisement.
 
 #### Prompts
 
@@ -505,6 +564,113 @@ To register this SSE server inside Bob's MCP configuration, use the `"sse"` tran
   "mcpServers": {
     "mcp-poc-sse": {
       "url": "http://127.0.0.1:8080",
+      "disabled": false,
+      "alwaysAllow": []
+    }
+  }
+}
+```
+
+
+---
+
+## Technical Documentation — Streamable HTTP Transport
+
+The **Streamable HTTP transport** is the modern, unified HTTP transport introduced with **MCP Spec 2025-03-26**. It supersedes the legacy HTTP+SSE transport and condenses the two-endpoint model into a single `/mcp` endpoint that handles all JSON-RPC traffic.
+
+---
+
+### Streamable HTTP vs. Legacy SSE — Key Differences
+
+| Aspect | Legacy SSE (Spec 2024-11-05) | Streamable HTTP (Spec 2025-03-26) |
+|---|---|---|
+| **Endpoints** | `GET /sse` + `POST /message` (two separate URLs) | `GET /mcp` + `POST /mcp` (single unified URL) |
+| **Client→Server messages** | HTTP POST to a separate `/message` endpoint | HTTP POST to the same `/mcp` endpoint |
+| **Server→Client messages** | Persistent SSE stream opened via `GET /sse` | Optional SSE stream opened via `GET /mcp`, or inline JSON in the POST response |
+| **Session negotiation** | Session ID delivered via the SSE `endpoint` event | Session ID returned in `Mcp-Session-Id` response header |
+| **SDK class (server)** | `WebFluxSseServerTransportProvider` | `WebFluxStreamableServerTransportProvider` |
+| **SDK class (client)** | `HttpClientSseClientTransport` | `HttpClientStreamableHttpTransport` |
+| **Port (this project)** | `8080` | `8081` |
+
+---
+
+### Streamable HTTP Architecture
+
+The client can choose to open a persistent SSE subscription (GET) or operate purely in request–response mode (POST). Both directions share the same `/mcp` endpoint:
+
+```mermaid
+sequenceDiagram
+    participant Host as Host / MCP Client (e.g. Bob)
+    participant Server as MCP Streamable HTTP Server
+
+    Note over Host,Server: Server is started manually on port 8081
+    Host->>Server: HTTP POST http://127.0.0.1:8081/mcp (initialize)
+    Server-->>Host: 200 OK + Mcp-Session-Id header + JSON-RPC response
+    Note over Host,Server: Handshake complete — session established
+
+    opt Client opens persistent notification stream
+        Host->>Server: HTTP GET http://127.0.0.1:8081/mcp (Mcp-Session-Id: ...)
+        Server-->>Host: 200 OK — persistent SSE event stream
+    end
+
+    Host->>Server: HTTP POST http://127.0.0.1:8081/mcp (tools/call, Mcp-Session-Id: ...)
+    Server-->>Host: 200 OK — JSON-RPC response (inline or via SSE stream)
+```
+
+---
+
+### Lifecycle and Localhost Constraints
+
+Identical to the SSE transport:
+* **Manual Lifecycle Management:** The server must be started (`java -jar target/MCP-1.0.0.jar streamableserver`) before any client connects, and stopped manually via `Ctrl+C` or a process signal.
+* **Strict Security Constraints:** `StreamableSseServer.java` binds exclusively to `127.0.0.1:8081`. It never binds to `0.0.0.0`.
+
+---
+
+### Code Structure (StreamableSseServer)
+
+`StreamableSseServer.java` is a direct subclass of `Server.java`, structured identically to `SseServer.java` — only the transport provider class and port constant differ:
+
+```mermaid
+flowchart TD
+    main["StreamableSseServer.main()"]
+    main --> pStreamable["processTransportStreamable()\nConfigures WebFluxStreamableServerTransportProvider"]
+    pStreamable --> build["buildServer()\nRegisters all specifications\nBuilds McpAsyncServer\nBinds Netty HttpServer to 127.0.0.1:8081"]
+```
+
+The server builder call mirrors SseServer exactly — the only difference is the transport provider type:
+
+```java
+// SseServer — two endpoints
+WebFluxSseServerTransportProvider transportProvider = WebFluxSseServerTransportProvider.builder()
+        .objectMapper(objectMapper)
+        .sseEndpoint("/sse")
+        .messageEndpoint("/message").build();
+
+// StreamableSseServer — single unified endpoint
+WebFluxStreamableServerTransportProvider transportProvider = WebFluxStreamableServerTransportProvider.builder()
+        .objectMapper(objectMapper)
+        .messageEndpoint("/mcp").build();
+```
+
+#### Registered primitives over Streamable HTTP:
+* **Tools:** `echo`, `add`, `current_time`
+* **Resources:** `info` (labeled as StreamableSseServer), `system-properties`, `echo` (template instance), `junit-test` (template instance)
+* **Resource Templates:** `mcp://poc/echo/{message}`
+* **Prompts:** `code_review`, `summarise`
+* **Sampling:** Supported via the `llm_expand` tool — the server triggers a `sampling/createMessage` request on the exchange, which the client's host LLM services and returns inline.
+
+---
+
+### Bob Client Configuration (Streamable HTTP)
+
+To register this Streamable HTTP server inside Bob's MCP configuration, point to the unified `/mcp` endpoint:
+
+```json
+{
+  "mcpServers": {
+    "mcp-poc-streamable": {
+      "url": "http://127.0.0.1:8081/mcp",
       "disabled": false,
       "alwaysAllow": []
     }

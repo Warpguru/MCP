@@ -4,6 +4,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import edu.java.service.SseServer;
+import edu.java.service.StreamableSseServer;
 import io.modelcontextprotocol.spec.McpSchema;
 
 /**
@@ -26,6 +27,8 @@ public class MCP {
     public static final String MCP_JAVA_SDK_STDIO_SERVER = "MCP Java SDK StdioServer";
     /** MCP sse server. */
     public static final String MCP_JAVA_SDK_SSE_SERVER = "MCP Java SDK SseServer";
+    /** MCP streamable-http server. */
+    public static final String MCP_JAVA_SDK_STREAMABLE_SERVER = "MCP Java SDK StreamableHttpServer";
     /** MCP client. */
     public static final String MCP_JAVA_SDK_CLIENT = "MCP Java SDK Client";
 
@@ -41,6 +44,9 @@ public class MCP {
             } else if ("sseserver".equalsIgnoreCase(subCommand)) {
                 edu.java.service.SseServer.main(subArgs);
                 return;
+            } else if ("streamableserver".equalsIgnoreCase(subCommand)) {
+                edu.java.service.StreamableSseServer.main(subArgs);
+                return;
             } else if ("client".equalsIgnoreCase(subCommand)) {
                 edu.java.service.Client.main(subArgs);
                 return;
@@ -52,11 +58,11 @@ public class MCP {
         loggerSysout.info("                     MCP Java SDK Tutorial Launcher                     ");
         loggerSysout.info("=========================================================================");
         loggerSysout.info("");
-        McpSchema.Implementation implementation = new McpSchema.Implementation("MCP Stdio/Sse Reference (Java SDK)", "0.9.0");
+        McpSchema.Implementation implementation = new McpSchema.Implementation("MCP Stdio/Sse Reference (Java SDK)", "0.11.0");
         loggerSysout.info("MCP Java SDK Api: Name = {}, Version = {}", implementation.name(), implementation.version());
         loggerSysout.info("");
         loggerSysout.info("Usage:");
-        loggerSysout.info("  java -jar target/MCP-" + MCP.MCP_VERSION + ".jar <subcommand> [args...]");
+        loggerSysout.info("  java -jar target/MCP-{}.jar <subcommand> [args...]", MCP.MCP_VERSION);
         loggerSysout.info("");
         loggerSysout.info("Available Subcommands:");
         loggerSysout.info("  stdioserver");
@@ -65,10 +71,16 @@ public class MCP {
         loggerSysout.info("");
         loggerSysout.info("  sseserver");
         loggerSysout.info("    -> Launches the stand-alone MCP Server over Server-Sent Events (SSE).");
-        loggerSysout.info("       Binds strictly to local loopback interface " + SseServer.SSE_HOST + ":" + SseServer.SSE_PORT
-                + " (no arguments).");
+        loggerSysout.info("       Binds strictly to local loopback interface {}:{} (no arguments).", SseServer.SSE_HOST,
+                SseServer.SSE_PORT);
         loggerSysout.info("");
-        loggerSysout.info("  client [sse] [url]   -- OR --   client [command] [args...]");
+        loggerSysout.info("  streamableserver");
+        loggerSysout.info("    -> Launches the stand-alone MCP Server over Streamable HTTP (MCP Spec 2025-03-26).");
+        loggerSysout.info("       Binds strictly to local loopback interface {}:{} (no arguments).",
+                StreamableSseServer.STREAMABLE_HOST, StreamableSseServer.STREAMABLE_PORT);
+        loggerSysout.info("");
+        loggerSysout
+                .info("  client [sse] [url]   -- OR --   client [streamable] [url]   -- OR --   client [command] [args...]");
         loggerSysout.info("    -> Launches the Universal MCP Client in one of three modes:");
         loggerSysout.info("");
         loggerSysout.info("    * Mode A: Internal Loopback (Omit all arguments)");
@@ -81,7 +93,14 @@ public class MCP {
         loggerSysout.info("        - sse: [REQUIRED] Literal keyword to select SSE transport.");
         loggerSysout.info("        - url: [OPTIONAL] Base URL of the server. Defaults to '{}'.", SseServer.SSE_SERVER);
         loggerSysout.info("");
-        loggerSysout.info("    * Mode C: Custom Stdio Subprocess (Using a command to launch)");
+        loggerSysout.info("    * Mode C: Remote Streamable HTTP Connection (Using literal keyword 'streamable')");
+        loggerSysout.info("      Command:  client streamable [url]");
+        loggerSysout.info("      Parameters:");
+        loggerSysout.info("        - streamable: [REQUIRED] Literal keyword to select Streamable HTTP transport.");
+        loggerSysout.info("        - url:        [OPTIONAL] Base URL of the server. Defaults to '{}'.",
+                StreamableSseServer.STREAMABLE_SERVER);
+        loggerSysout.info("");
+        loggerSysout.info("    * Mode D: Custom Stdio Subprocess (Using a command to launch)");
         loggerSysout.info("      Command:  client <command> [args...]");
         loggerSysout.info("      Parameters:");
         loggerSysout.info("        - command: [REQUIRED] Path or executable to spawn (e.g. 'node').");

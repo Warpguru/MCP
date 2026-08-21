@@ -56,7 +56,7 @@
 		-->
 		<Console name="ConsoleAppender" target="SYSTEM_ERR">
 			<PatternLayout
-				pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%30t] %-5level %-45logger{1.1.1}:%4L - %msg%n" />
+				pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%-30.30t] %-5level %-45logger{1.1.1}:%4L - %msg%n" />
 		</Console>
 
 		<!-- 
@@ -68,7 +68,7 @@
 			filePattern="MCP-%d{yyyy-MM-dd}.log" immediateFlush="true"
 			append="true">
 			<PatternLayout
-				pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%30t] %-5level %-45logger{1.1.1}:%4L - %msg%n" />
+				pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%-30.30t] %-5level %-45logger{1.1.1}:%4L - %msg%n" />
 			<Policies>
 				<TimeBasedTriggeringPolicy interval="1" />
 			</Policies>
