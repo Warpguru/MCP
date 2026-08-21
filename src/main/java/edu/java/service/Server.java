@@ -199,17 +199,34 @@ public abstract class Server {
      */
     protected AsyncResourceSpecification createResourceSystemProperties() {
         Resource resource = new Resource("mcp://poc/system-properties", "System Properties",
-                "[MCP Primitives:Resource] Return all JVM system properties as JSON", "application/json", null);
+                "[MCP Primitives:Resource] Return all JVM system properties and environment variables as JSON", "application/json", null);
         return new AsyncResourceSpecification(resource, (exchange, request) -> {
             logger.info("Reading [MCP Primitives:Resource] 'mcp://poc/system-properties'");
             try {
-                var props = System.getProperties();
                 var sb = new StringBuilder("{");
+
+                // 1. Serialize JVM System Properties
+                sb.append("\"Properties\":{");
+                var props = System.getProperties();
                 props.forEach((k, v) -> sb.append("\"").append(k).append("\":\"").append(
                         v.toString().replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r"))
                         .append("\","));
-                if (sb.charAt(sb.length() - 1) == ',')
+                if (sb.charAt(sb.length() - 1) == ',') {
                     sb.deleteCharAt(sb.length() - 1);
+                }
+                sb.append("},");
+
+                // 2. Serialize OS Environment Variables
+                sb.append("\"Environment\":{");
+                var env = System.getenv();
+                env.forEach((k, v) -> sb.append("\"").append(k).append("\":\"").append(
+                        v.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r"))
+                        .append("\","));
+                if (sb.charAt(sb.length() - 1) == ',') {
+                    sb.deleteCharAt(sb.length() - 1);
+                }
+                sb.append("}");
+
                 sb.append("}");
                 return Mono.just(new ReadResourceResult(
                         List.of(new TextResourceContents("mcp://poc/system-properties", "application/json", sb.toString()))));
