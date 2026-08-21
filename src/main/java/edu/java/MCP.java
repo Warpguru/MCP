@@ -13,13 +13,20 @@ import io.modelcontextprotocol.spec.McpSchema;
 public class MCP {
 
     /** Default logger (using appender that includes e.g. timestamp, ...). */
+    @SuppressWarnings("unused")
     private static final Logger logger = LogManager.getLogger(MCP.class);
+
+    /** Sysout logger (no formatting). */
+    private static final Logger loggerSysout = LogManager.getLogger("edu.java.Sysout");
 
     /** MCP version (keep in sync with pom.xml). */
     public static final String MCP_VERSION = "1.0.0";
 
+    /** MCP stdio server. */
     public static final String MCP_JAVA_SDK_STDIO_SERVER = "MCP Java SDK StdioServer";
+    /** MCP sse server. */
     public static final String MCP_JAVA_SDK_SSE_SERVER = "MCP Java SDK SseServer";
+    /** MCP client. */
     public static final String MCP_JAVA_SDK_CLIENT = "MCP Java SDK Client";
 
     public static void main(String[] args) {
@@ -41,48 +48,45 @@ public class MCP {
         }
 
         // Default behavior: Show usage information
-        System.out.println("=========================================================================");
-        System.out.println("                     MCP Java SDK Tutorial Launcher                     ");
-        System.out.println("=========================================================================");
-        System.out.println("");
-        System.out.println("MCP Java SDK Api Loaded:");
+        loggerSysout.info("=========================================================================");
+        loggerSysout.info("                     MCP Java SDK Tutorial Launcher                     ");
+        loggerSysout.info("=========================================================================");
+        loggerSysout.info("");
         McpSchema.Implementation implementation = new McpSchema.Implementation("MCP Stdio/Sse Reference (Java SDK)", "0.9.0");
-        System.out.println("  Name:    " + implementation.name());
-        System.out.println("  Version: " + implementation.version());
-        logger.info("MCP Java SDK Api: Name = {}, Version = {}", implementation.name(), implementation.version());
-        System.out.println("");
-        System.out.println("Usage:");
-        System.out.println("  java -jar target/MCP-" + MCP.MCP_VERSION + ".jar <subcommand> [args...]");
-        System.out.println("");
-        System.out.println("Available Subcommands:");
-        System.out.println("  stdioserver");
-        System.out.println("    -> Launches the MCP Server over standard input/output (stdio).");
-        System.out.println("       Must be spawned as a child process by an MCP Host (no arguments).");
-        System.out.println("");
-        System.out.println("  sseserver");
-        System.out.println("    -> Launches the stand-alone MCP Server over Server-Sent Events (SSE).");
-        System.out.println("       Binds strictly to local loopback interface " + SseServer.SSE_HOST + ":" + SseServer.SSE_PORT
+        loggerSysout.info("MCP Java SDK Api: Name = {}, Version = {}", implementation.name(), implementation.version());
+        loggerSysout.info("");
+        loggerSysout.info("Usage:");
+        loggerSysout.info("  java -jar target/MCP-" + MCP.MCP_VERSION + ".jar <subcommand> [args...]");
+        loggerSysout.info("");
+        loggerSysout.info("Available Subcommands:");
+        loggerSysout.info("  stdioserver");
+        loggerSysout.info("    -> Launches the MCP Server over standard input/output (stdio).");
+        loggerSysout.info("       Must be spawned as a child process by an MCP Host (no arguments).");
+        loggerSysout.info("");
+        loggerSysout.info("  sseserver");
+        loggerSysout.info("    -> Launches the stand-alone MCP Server over Server-Sent Events (SSE).");
+        loggerSysout.info("       Binds strictly to local loopback interface " + SseServer.SSE_HOST + ":" + SseServer.SSE_PORT
                 + " (no arguments).");
-        System.out.println("");
-        System.out.println("  client [sse] [url]   -- OR --   client [command] [args...]");
-        System.out.println("    -> Launches the Universal MCP Client in one of three modes:");
-        System.out.println("");
-        System.out.println("    * Mode A: Internal Loopback (Omit all arguments)");
-        System.out.println("      Command:  client");
-        System.out.println("      Behavior: Spawns the StdioServer internally and executes test handshake.");
-        System.out.println("");
-        System.out.println("    * Mode B: Remote SSE Connection (Using literal keyword 'sse')");
-        System.out.println("      Command:  client sse [url]");
-        System.out.println("      Parameters:");
-        System.out.println("        - sse: [REQUIRED] Literal keyword to select SSE transport.");
-        System.out.println("        - url: [OPTIONAL] Base URL of the server. Defaults to '" + SseServer.SSE_SERVER + "'.");
-        System.out.println("");
-        System.out.println("    * Mode C: Custom Stdio Subprocess (Using a command to launch)");
-        System.out.println("      Command:  client <command> [args...]");
-        System.out.println("      Parameters:");
-        System.out.println("        - command: [REQUIRED] Path or executable to spawn (e.g. 'node').");
-        System.out.println("        - args...: [OPTIONAL] Parameters forwarded to the spawned program.");
-        System.out.println("=========================================================================");
+        loggerSysout.info("");
+        loggerSysout.info("  client [sse] [url]   -- OR --   client [command] [args...]");
+        loggerSysout.info("    -> Launches the Universal MCP Client in one of three modes:");
+        loggerSysout.info("");
+        loggerSysout.info("    * Mode A: Internal Loopback (Omit all arguments)");
+        loggerSysout.info("      Command:  client");
+        loggerSysout.info("      Behavior: Spawns the StdioServer internally and executes test handshake.");
+        loggerSysout.info("");
+        loggerSysout.info("    * Mode B: Remote SSE Connection (Using literal keyword 'sse')");
+        loggerSysout.info("      Command:  client sse [url]");
+        loggerSysout.info("      Parameters:");
+        loggerSysout.info("        - sse: [REQUIRED] Literal keyword to select SSE transport.");
+        loggerSysout.info("        - url: [OPTIONAL] Base URL of the server. Defaults to '{}'.", SseServer.SSE_SERVER);
+        loggerSysout.info("");
+        loggerSysout.info("    * Mode C: Custom Stdio Subprocess (Using a command to launch)");
+        loggerSysout.info("      Command:  client <command> [args...]");
+        loggerSysout.info("      Parameters:");
+        loggerSysout.info("        - command: [REQUIRED] Path or executable to spawn (e.g. 'node').");
+        loggerSysout.info("        - args...: [OPTIONAL] Parameters forwarded to the spawned program.");
+        loggerSysout.info("=========================================================================");
     }
 
 }

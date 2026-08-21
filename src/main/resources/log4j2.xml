@@ -1,46 +1,122 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ===================================================================================================
+  CRITICAL LOGGING CONFIGURATION FOR MODEL CONTEXT PROTOCOL (MCP) DEVELOPERS
+  ===================================================================================================
+  
+  BACKGROUND:
+  The Model Context Protocol (MCP) relies on two major transport modes: Standard Input/Output (stdio)
+  and Server-Sent Events (SSE) / HTTP.
+  
+  THE STDIO TRANSPORT CONSTRAINT (CRITICAL WARNING):
+  In stdio mode, the MCP Client and MCP Server communicate over standard input (stdin) and standard
+  output (stdout) using structured JSON-RPC messages. 
+  - Any accidental output written to standard output (SYSTEM_OUT / stdout) from other sources—such as
+    framework logs, application diagnostics, debug tracebacks, or direct 'System.out.println()' calls—
+    will corrupt the JSON-RPC stream.
+  - This corruption IMMEDIATELY breaks the JSON-RPC parsing pipeline of the client/host, leading to
+    unrecoverable communication crashes and protocol faults.
+  
+  THE SOLUTION IMPLEMENTED HERE:
+  1. ALL standard logging appenders (including the Root logger and custom category loggers) are routed
+     strictly to either SYSTEM_ERR (standard error) or a rolling log file ("MCP.log").
+  2. SYSTEM_ERR is entirely safe for human-readable diagnostics as it is ignored by the MCP client's
+     JSON-RPC parser, allowing real-time terminal tracing without polluting the communication channel.
+  3. A dedicated log file ("ConsoleFileAppender" -> MCP.log) captures highly detailed, unfiltered
+     logs (including SDK internal JSON-RPC packets) for off-line debugging.
+  4. The only logger target allowed to write to SYSTEM_OUT is the specialized "SysoutAppender"
+     under the "edu.java.Sysout" logger, which is used strictly for printing standalone CLI launchers,
+     help menus, or diagnostic summaries when the program is executed directly by a human.
+  
+  SSESERVER CONSIDERATION:
+  While SseServer.java communicates via HTTP/SSE instead of a child-process stdio pipe, keeping
+  this exact clean logging design is still critical:
+  - It ensures both StdioServer and SseServer behave identically and predictably.
+  - It prevents any stdout pollution or log leakage into CLI scripts, wrappers, or parent orchestrators
+    that might be capturing stdout of the SseServer process.
+  - It guarantees consistent isolation between clean protocol message streams and diagnostic info.
+  ===================================================================================================
+-->
 <Configuration status="WARN">
-	<Appenders>
 
-		<!-- Formatted console output for warnings and errors -->
-		<Console name="ConsoleAppender" target="SYSTEM_OUT">
+	<Appenders>
+		<!-- 
+		  SysoutAppender: Writes directly to standard output (SYSTEM_OUT).
+		  MUST BE RESERVED EXCLUSIVELY for human-facing standalone launcher CLI help screens.
+		  NEVER use this for standard application logic or library tracing.
+		-->
+		<Console name="SysoutAppender" target="SYSTEM_OUT">
+			<PatternLayout pattern="%msg%n" />
+		</Console>
+		
+		<!-- 
+		  ConsoleAppender: Writes directly to standard error (SYSTEM_ERR).
+		  Safe for standard framework and application log tracing because it is ignored 
+		  by the MCP stdio JSON-RPC parser.
+		-->
+		<Console name="ConsoleAppender" target="SYSTEM_ERR">
 			<PatternLayout
-				pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%30t] %-5level %-45logger{1}:%4L - %msg%n" />
-			<ThresholdFilter level="WARN" onMatch="ACCEPT"
-				onMismatch="DENY" />
+				pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%30t] %-5level %-45logger{1.1.1}:%4L - %msg%n" />
 		</Console>
 
-		<!-- Log file -->
+		<!-- 
+		  ConsoleFileAppender: Writes structured, unfiltered diagnostics to "MCP.log".
+		  Extremely useful for viewing raw JSON-RPC traffic exchange without touching console streams.
+		-->
 		<RollingFile name="ConsoleFileAppender"
 			fileName="MCP.log"
 			filePattern="MCP-%d{yyyy-MM-dd}.log" immediateFlush="true"
 			append="true">
 			<PatternLayout
-				pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%30t] %-5level %-45logger{1}:%4L - %msg%n" />
+				pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%30t] %-5level %-45logger{1.1.1}:%4L - %msg%n" />
 			<Policies>
 				<TimeBasedTriggeringPolicy interval="1" />
 			</Policies>
 		</RollingFile>
-
 	</Appenders>
+	
 	<Loggers>
-
-		<!-- Application logging: logfile always, console only WARN+ -->
-		<Logger name="edu.java" level="ALL" additivity="false">
-			<AppenderRef ref="ConsoleAppender" />
-			<AppenderRef ref="ConsoleFileAppender" />
-		</Logger>
-
-		<!-- Capture raw JSON-RPC traffic and internal MCP SDK events into MCP.log -->
-		<Logger name="io.modelcontextprotocol" level="TRACE" additivity="false">
-			<AppenderRef ref="ConsoleAppender" />
-			<AppenderRef ref="ConsoleFileAppender" />
-		</Logger>
-
-		<!-- Catch everything else -->
+		<!-- 
+		  Root Logger: Fallback logger for third-party libraries and frameworks (e.g. Spring, Reactor).
+		  Configured to log to ConsoleAppender (SYSTEM_ERR) to prevent stdio pollution.
+		-->
 		<Root level="INFO">
-			<AppenderRef ref="ConsoleFileAppender" />
+			<AppenderRef ref="ConsoleAppender" />
 		</Root>
 
+		<!-- 
+		  edu.java.Sysout Logger: Used ONLY for standalone CLI launcher help menus.
+		  Routes to both the human console (SYSTEM_OUT) and the debug file.
+		-->
+		<Logger name="edu.java.Sysout" level="INFO" additivity="false">
+			<AppenderRef ref="SysoutAppender" />
+			<AppenderRef ref="ConsoleFileAppender" />
+		</Logger>
+
+		<!--
+		  edu.java Logger: Main application logger.
+		  - Filtered to log only WARN, ERROR, and FATAL events to ConsoleAppender (SYSTEM_ERR).
+		    NOTE: Since ConsoleAppender targets SYSTEM_ERR, it is fully protocol-safe and could
+		    technically log more verbose levels (like INFO/DEBUG) without polluting the stdio transport.
+		    We restrict it to WARN+ here purely for terminal noise reduction / user-experience preference.
+		  - Logs ALL events (including INFO, DEBUG, TRACE) silently to the "MCP.log" file.
+		-->
+		<Logger name="edu.java" level="ALL" additivity="false">
+			<AppenderRef ref="ConsoleAppender">
+				<LevelRangeFilter minLevel="FATAL" maxLevel="WARN" onMatch="ACCEPT" onMismatch="DENY"/>
+			</AppenderRef>
+			<AppenderRef ref="ConsoleFileAppender" />
+		</Logger>
+
+		<!--
+		  io.modelcontextprotocol Logger: Internal MCP Java SDK logger.
+		  Set to INFO to prevent verbose, duplicated JSON-RPC packet dumps (which are logged
+		  at DEBUG level by both transport providers and schema parsing components).
+		  Logged EXCLUSIVELY to MCP.log to avoid swamping standard streams.
+		-->
+		<Logger name="io.modelcontextprotocol" level="DEBUG" additivity="false">
+			<AppenderRef ref="ConsoleFileAppender" />
+		</Logger>
 	</Loggers>
+	
 </Configuration>

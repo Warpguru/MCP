@@ -162,7 +162,14 @@ To register the Stdio server inside your AI assistant / Bob host environment, in
         "X:\\Path\\MCP\\target\\MCP-1.0.0.jar",
         "stdioserver"
       ],
-      "disabled": false
+      "cwd": "D:\\Workspace WCA\\MCP",
+      "disabled": false,
+      "alwaysAllow": [
+        "echo",
+        "add",
+        "current_time",
+        "llm_expand"
+      ]
     }
   }
 }
@@ -175,9 +182,14 @@ To register the standalone SSE server inside your assistant, ensure the `sseserv
 {
   "mcpServers": {
     "mcp-test-sse": {
-      "url": "http://127.0.0.1:8080",
+      "url": "http://127.0.0.1:8080/sse",
       "disabled": false,
-      "alwaysAllow": []
+      "alwaysAllow": [
+        "echo",
+        "add",
+        "current_time",
+        "llm_expand"
+      ]
     }
   }
 }

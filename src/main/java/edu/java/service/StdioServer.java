@@ -1,8 +1,5 @@
 package edu.java.service;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import edu.java.MCP;
 import io.modelcontextprotocol.server.McpAsyncServer;
 import io.modelcontextprotocol.server.McpServer;
@@ -24,9 +21,6 @@ import reactor.core.publisher.Mono;
  * the logger, which is configured to write to {@code System.err} and the log file.
  */
 public class StdioServer extends Server {
-
-    /** Default logger (using appender that includes e.g. timestamp, ...). */
-    private static final Logger logger = LogManager.getLogger(StdioServer.class);
 
     /**
      * Constructor initializing the StdioServer base details.
@@ -50,13 +44,7 @@ public class StdioServer extends Server {
      * @param args command-line arguments (not used)
      */
     public static void main(String[] args) {
-        try {
-            new StdioServer().processTransportStdio();
-        } catch (Exception e) {
-            logger.error("Fatal error starting " + MCP.MCP_JAVA_SDK_STDIO_SERVER, e);
-            System.err.println("Fatal error: " + e.getMessage());
-            System.exit(1);
-        }
+        new StdioServer().processTransportStdio();
     }
 
     // -------------------------------------------------------------------------
@@ -76,8 +64,13 @@ public class StdioServer extends Server {
      * {@link #buildServer(io.modelcontextprotocol.spec.McpServerTransportProvider)}.
      */
     public void processTransportStdio() {
-        logger.info("Starting " + MCP.MCP_JAVA_SDK_STDIO_SERVER + " over stdio transport...");
-        buildServer(new StdioServerTransportProvider());
+        logger.info("Starting {} over stdio transport...", MCP.MCP_JAVA_SDK_STDIO_SERVER);
+        try {
+            buildServer(new StdioServerTransportProvider());
+        } catch (Exception e) {
+            logger.error("Fatal error starting {}: {}", MCP.MCP_JAVA_SDK_STDIO_SERVER, e.getMessage());
+            System.exit(1);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -95,28 +88,28 @@ public class StdioServer extends Server {
      */
     private void buildServer(final McpServerTransportProvider transportProvider) {
         ServerCapabilities capabilities = ServerCapabilities.builder().tools(true).resources(false, true).prompts(true).build();
-        
+
         // MCP Tools (standard)
         AsyncToolSpecification toolEcho = createToolEcho();
         AsyncToolSpecification toolAdd = createToolAdd();
         AsyncToolSpecification toolCurrentTime = createToolCurrentTime();
-        
+
         // MCP Sampling (technically registered as a Tool, semantically a capability)
         AsyncToolSpecification toolLlmExpand = createSamplingLlmExpand();
-        
+
         // MCP Resources (static, concrete URIs)
         AsyncResourceSpecification resourceInfo = createResourceInfo();
         AsyncResourceSpecification resourceSystemProperties = createResourceSystemProperties();
         AsyncResourceSpecification resourceEchoHello = createResourceEchoHello();
         AsyncResourceSpecification resourceEchoJunit = createResourceEchoJunit();
-        
+
         // MCP Resource Templates (URI patterns advertised to clients)
         ResourceTemplate resourceTemplateEcho = createResourceTemplateEcho();
-        
+
         // MCP Prompts
         AsyncPromptSpecification promptCodeReview = createPromptCodeReview();
         AsyncPromptSpecification promptSummarise = createPromptSummarise();
-        
+
         //@formatter:off
         @SuppressWarnings("unused")
         McpAsyncServer server = McpServer
@@ -129,8 +122,8 @@ public class StdioServer extends Server {
             .prompts(promptCodeReview, promptSummarise)
             .build();
         //@formatter:on
-        
-        logger.info(MCP.MCP_JAVA_SDK_STDIO_SERVER + " started successfully.");
+
+        logger.info("{} started successfully.", MCP.MCP_JAVA_SDK_STDIO_SERVER);
         // Block the calling thread forever so the reactive transport threads keep running.
         Mono.never().block();
     }

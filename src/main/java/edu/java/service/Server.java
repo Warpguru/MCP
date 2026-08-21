@@ -39,6 +39,9 @@ public abstract class Server {
     /** Default logger resolved dynamically based on the concrete subclass name. */
     protected final Logger logger = LogManager.getLogger(getClass());
 
+    /** Sysout logger (no formatting). */
+    protected final Logger loggerSysout = LogManager.getLogger("edu.java.Sysout");
+
     /** Shared Jackson object mapper instance. */
     protected static final ObjectMapper objectMapper = new ObjectMapper();
 

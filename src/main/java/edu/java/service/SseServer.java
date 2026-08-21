@@ -1,8 +1,5 @@
 package edu.java.service;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import edu.java.MCP;
 import io.modelcontextprotocol.server.McpAsyncServer;
 import io.modelcontextprotocol.server.McpServer;
@@ -18,8 +15,8 @@ import reactor.core.publisher.Mono;
 import reactor.netty.http.server.HttpServer;
 
 /**
- * MCP Server implementation over HTTP + SSE (Server-Sent Events) using WebFlux transport.
- * Inherits all core MCP primitive factory methods from {@link Server}.
+ * MCP Server implementation over HTTP + SSE (Server-Sent Events) using WebFlux transport. Inherits all core MCP primitive
+ * factory methods from {@link Server}.
  */
 public class SseServer extends Server {
 
@@ -33,9 +30,6 @@ public class SseServer extends Server {
     public static final String SSE_ENDPOINT = "/sse";
     /** Client JSON-RPC command message endpoint path. */
     public static final String MESSAGE_ENDPOINT = "/message";
-
-    /** Default logger (using appender that includes e.g. timestamp, ...). */
-    private static final Logger logger = LogManager.getLogger(SseServer.class);
 
     /**
      * Constructor initializing the SseServer base details.
@@ -54,23 +48,34 @@ public class SseServer extends Server {
      * @param args command-line arguments (not used)
      */
     public static void main(String[] args) {
-        try {
-            new SseServer().processTransportSse();
-        } catch (Exception e) {
-            logger.error("Fatal error starting " + MCP.MCP_JAVA_SDK_SSE_SERVER, e);
-            System.err.println("Fatal error: " + e.getMessage());
-            System.exit(1);
-        }
+        new SseServer().processTransportSse();
     }
 
     // -------------------------------------------------------------------------
     // Transport entry points
     // -------------------------------------------------------------------------
 
+    /**
+     * MCP Transport — Server-Sent Events (SSE).
+     *
+     * <p>
+     * Launches the MCP Server over the SSE transport, setting up standard HTTP endpoints for client routing.
+     * Unlike stdio which communicates over a single subprocess pipe, this transport uses a standalone reactive
+     * Netty HTTP server bound strictly to the loopback interface {@link #SSE_HOST} and {@link #SSE_PORT}.
+     *
+     * <p>
+     * Delegates all primitive registration, endpoint routing, and server startup to {@link #buildServer()}.
+     * Catch block guarantees any fatal startup exceptions are logged cleanly and shuts down the process
+     * with exit code {@code 1}.
+     */
     public void processTransportSse() {
-        System.err.println("Starting " + MCP.MCP_JAVA_SDK_SSE_SERVER + " over sse transport...");
-        logger.info("Starting " + MCP.MCP_JAVA_SDK_SSE_SERVER + " over sse transport...");
-        buildServer();
+        loggerSysout.info("Starting {} over sse transport...", MCP.MCP_JAVA_SDK_SSE_SERVER);
+        try {
+            buildServer();
+        } catch (Exception e) {
+            loggerSysout.error("Fatal error starting {}: {}", MCP.MCP_JAVA_SDK_SSE_SERVER, e.getMessage());
+            System.exit(1);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -147,16 +152,14 @@ public class SseServer extends Server {
                     .bindNow();
             //@formatter:on
 
-            System.err.println(MCP.MCP_JAVA_SDK_SSE_SERVER + " started successfully and listening on " + SSE_SERVER);
-            System.err.println("  SSE Endpoint: " + SSE_SERVER + SSE_ENDPOINT);
-            System.err.println("  Message Endpoint: " + SSE_SERVER + MESSAGE_ENDPOINT);
-            logger.info(MCP.MCP_JAVA_SDK_SSE_SERVER + " started successfully and listening on " + SSE_SERVER + SSE_ENDPOINT);
+            loggerSysout.info("{} started successfully and listening on {}", MCP.MCP_JAVA_SDK_SSE_SERVER, SSE_SERVER);
+            loggerSysout.info("  SSE Endpoint: {}", SSE_SERVER + SSE_ENDPOINT);
+            loggerSysout.info("  Message Endpoint: {}", SSE_SERVER + MESSAGE_ENDPOINT);
 
             // Keep the main thread alive indefinitely to let background netty threads run
             Mono.never().block();
-
         } catch (Exception e) {
-            logger.error("Fatal error starting " + MCP.MCP_JAVA_SDK_SSE_SERVER, e);
+            loggerSysout.error("Fatal error starting {}: {}", MCP.MCP_JAVA_SDK_SSE_SERVER, e.getMessage());
             throw new RuntimeException(e);
         }
     }
