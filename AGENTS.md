@@ -33,7 +33,7 @@ Core payload models are Java **records**. All short-form constructors are `@Depr
 
 | Deprecated constructor | Current builder replacement |
 |---|---|
-| `new McpSchema.Implementation(name, version)` | `McpSchema.Implementation.builder(name, version).build()` |
+| `new McpSchema.Implementation(name, version)` | `McpSchema.Implementation.builder(name, version).build()` — optionally chain `.title(String).description(String)` to populate the fields Bob shows on its MCP server list |
 | `new CallToolRequest(name, Map)` | `CallToolRequest.builder(name).arguments(map).build()` |
 | `new GetPromptRequest(name, Map)` | `GetPromptRequest.builder(name).arguments(map).build()` |
 | `new ReadResourceRequest(uri)` | `ReadResourceRequest.builder(uri).build()` |
@@ -115,6 +115,31 @@ CreateMessageResult.builder(Role.ASSISTANT, TextContent.builder("reply").build()
 CreateMessageResult.builder().role(Role.ASSISTANT)...
 ```
 
+### 2.9 `McpSchema.Implementation` Full Builder Fields + Protocol Version Note
+
+`McpSchema.Implementation` in `2.0.1` has six optional builder fields beyond `name` and `version`:
+```java
+McpSchema.Implementation.builder("my-server", "2.0.0")
+    .title("My MCP Server")                    // Human-readable display title (shown in Bob's MCP server list)
+    .description("What this server does")      // One-sentence description (shown in Bob's MCP server list)
+    .websiteUrl("https://example.com")         // Optional URL
+    .build()
+```
+Always use `.title()` and `.description()` on all server `serverInfo()` calls so that MCP host
+UIs (e.g. Bob) can display meaningful metadata. The `McpServer.async().serverInfo()` builder
+accepts either `serverInfo(String name, String version)` or `serverInfo(Implementation impl)`.
+
+**Protocol version negotiation WARN** — SDK `2.0.1` implements MCP protocol `2024-11-05`. Modern
+clients (e.g. `mcp-use ≥ 1.33.0`) request `2025-11-25`. The server will log:
+```
+WARN Client requested unsupported protocol version: 2025-11-25,
+     so the server will suggest the 2024-11-05 version instead
+```
+This is **expected, harmless, and per-spec** — the MCP specification mandates downgrade
+negotiation. The client accepts the server's offered version and the session continues normally.
+It does not indicate a bug. The WARN disappears only when the SDK is upgraded to a version that
+natively speaks `2025-11-25`. As of `2026-08-24` no such Java SDK release exists on Maven Central.
+
 ---
 
 ## 3. Server-Client Connection Patterns
@@ -123,7 +148,10 @@ CreateMessageResult.builder().role(Role.ASSISTANT)...
 When starting the server, instantiate `McpServer.async(transportProvider)` and chain the tool, resource, and prompt registrations directly onto the fluent builder before calling `.build()`:
 ```java
 McpAsyncServer server = McpServer.async(new StdioServerTransportProvider(McpJsonDefaults.getMapper()))
-    .serverInfo("my-server", "1.0.0")
+    .serverInfo(McpSchema.Implementation.builder("my-server", "2.0.0")
+        .title("My MCP Server")
+        .description("Short description shown in Bob's MCP server list.")
+        .build())
     .capabilities(capabilities)
     .tools(toolSpec)
     .resources(resourceSpec)

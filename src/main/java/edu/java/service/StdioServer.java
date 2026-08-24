@@ -9,6 +9,7 @@ import io.modelcontextprotocol.server.McpServerFeatures.AsyncResourceSpecificati
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncResourceTemplateSpecification;
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
+import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import reactor.core.publisher.Mono;
@@ -27,7 +28,7 @@ public class StdioServer extends Server {
      * Constructor initializing the StdioServer base details.
      */
     public StdioServer() {
-        super("StdioServer", "StdioServer Info");
+        super("StdioServer", "MCP Stdio Server Info");
     }
 
     // -------------------------------------------------------------------------
@@ -121,7 +122,12 @@ public class StdioServer extends Server {
         @SuppressWarnings("unused")
         McpAsyncServer server = McpServer
             .async(transportProvider)
-            .serverInfo(MCP.MCP_JAVA_SDK_STDIO_SERVER, MCP.MCP_VERSION)
+            .serverInfo(McpSchema.Implementation.builder(MCP.MCP_JAVA_SDK_STDIO_SERVER, MCP.MCP_VERSION)
+                    .title("MCP Java SDK \u2014 Stdio Reference Server")
+                    .description("MCP Java SDK reference implementation over stdio transport. "
+                            + "Exposes echo/add/time tools, static resources, a resource template, "
+                            + "code-review and summarise prompts, and an LLM-expansion sampling capability.")
+                    .build())
             .capabilities(capabilities)
             .tools(toolEcho, toolAdd, toolCurrentTime, toolLlmExpand)
             .resources(resourceInfo, resourceSystemProperties, resourceEchoHello, resourceEchoJunit)
