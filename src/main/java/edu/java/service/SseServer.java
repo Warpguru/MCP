@@ -27,7 +27,7 @@ public class SseServer extends Server {
     public static final String SSE_HOST = "127.0.0.1";
     /** Port of MCP Server. */
     public static final String SSE_PORT = "8080";
-    /** Adress of MCP Server. */
+    /** Address of MCP Server. */
     public static final String SSE_SERVER = "http" + "://" + SSE_HOST + ":" + SSE_PORT;
     /** SSE stream subscription endpoint path. */
     public static final String SSE_ENDPOINT = "/sse";
