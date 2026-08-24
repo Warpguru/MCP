@@ -58,7 +58,8 @@ public class MCP {
         loggerSysout.info("                     MCP Java SDK Tutorial Launcher                     ");
         loggerSysout.info("=========================================================================");
         loggerSysout.info("");
-        McpSchema.Implementation implementation = new McpSchema.Implementation("MCP Stdio/Sse Reference (Java SDK)", "0.11.0");
+        McpSchema.Implementation implementation = McpSchema.Implementation
+                .builder("MCP Stdio/Sse Reference (Java SDK)", "2.0.1").build();
         loggerSysout.info("MCP Java SDK Api: Name = {}, Version = {}", implementation.name(), implementation.version());
         loggerSysout.info("");
         loggerSysout.info("Usage:");

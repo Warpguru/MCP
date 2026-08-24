@@ -1,16 +1,18 @@
 package edu.java.service;
 
+import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
+import org.springframework.web.reactive.function.server.RouterFunctions;
+
 import edu.java.MCP;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpAsyncServer;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncPromptSpecification;
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncResourceSpecification;
+import io.modelcontextprotocol.server.McpServerFeatures.AsyncResourceTemplateSpecification;
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification;
 import io.modelcontextprotocol.server.transport.WebFluxStreamableServerTransportProvider;
-import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
-import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
-import org.springframework.web.reactive.function.server.RouterFunctions;
 import reactor.core.publisher.Mono;
 import reactor.netty.http.server.HttpServer;
 
@@ -102,14 +104,22 @@ public class StreamableSseServer extends Server {
         try {
             // 1. Initialize the WebFlux Streamable HTTP Transport Provider
             //@formatter:off
-            WebFluxStreamableServerTransportProvider transportProvider = WebFluxStreamableServerTransportProvider.builder()
-                    .objectMapper(objectMapper)
-                    .messageEndpoint(STREAMABLE_ENDPOINT).build();
+            WebFluxStreamableServerTransportProvider transportProvider = WebFluxStreamableServerTransportProvider
+                    .builder()
+                    .jsonMapper(McpJsonDefaults.getMapper())
+                    .messageEndpoint(STREAMABLE_ENDPOINT)
+                    .build();
             //@formatter:on
 
             // 2. Build Server Capabilities (Tools, Resources, Prompts)
-            ServerCapabilities capabilities = ServerCapabilities.builder().tools(true).resources(false, true).prompts(true)
+            //@formatter:off
+            ServerCapabilities capabilities = ServerCapabilities
+                    .builder()
+                    .tools(true)
+                    .resources(false, true)
+                    .prompts(true)
                     .build();
+            //@formatter:on
 
             // 3. Define and configure all specifications
             AsyncToolSpecification toolEcho = createToolEcho();
@@ -122,7 +132,7 @@ public class StreamableSseServer extends Server {
             AsyncResourceSpecification resourceEchoHello = createResourceEchoHello();
             AsyncResourceSpecification resourceEchoJunit = createResourceEchoJunit();
 
-            ResourceTemplate resourceTemplateEcho = createResourceTemplateEcho();
+            AsyncResourceTemplateSpecification resourceTemplateEcho = createResourceTemplateEcho();
 
             AsyncPromptSpecification promptCodeReview = createPromptCodeReview();
             AsyncPromptSpecification promptSummarise = createPromptSummarise();

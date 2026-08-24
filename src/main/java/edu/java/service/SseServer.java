@@ -1,16 +1,18 @@
 package edu.java.service;
 
+import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
+import org.springframework.web.reactive.function.server.RouterFunctions;
+
 import edu.java.MCP;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpAsyncServer;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncPromptSpecification;
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncResourceSpecification;
+import io.modelcontextprotocol.server.McpServerFeatures.AsyncResourceTemplateSpecification;
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification;
 import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvider;
-import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
-import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
-import org.springframework.web.reactive.function.server.RouterFunctions;
 import reactor.core.publisher.Mono;
 import reactor.netty.http.server.HttpServer;
 
@@ -59,14 +61,13 @@ public class SseServer extends Server {
      * MCP Transport — Server-Sent Events (SSE).
      *
      * <p>
-     * Launches the MCP Server over the SSE transport, setting up standard HTTP endpoints for client routing.
-     * Unlike stdio which communicates over a single subprocess pipe, this transport uses a standalone reactive
-     * Netty HTTP server bound strictly to the loopback interface {@link #SSE_HOST} and {@link #SSE_PORT}.
+     * Launches the MCP Server over the SSE transport, setting up standard HTTP endpoints for client routing. Unlike stdio which
+     * communicates over a single subprocess pipe, this transport uses a standalone reactive Netty HTTP server bound strictly to
+     * the loopback interface {@link #SSE_HOST} and {@link #SSE_PORT}.
      *
      * <p>
-     * Delegates all primitive registration, endpoint routing, and server startup to {@link #buildServer()}.
-     * Catch block guarantees any fatal startup exceptions are logged cleanly and shuts down the process
-     * with exit code {@code 1}.
+     * Delegates all primitive registration, endpoint routing, and server startup to {@link #buildServer()}. Catch block
+     * guarantees any fatal startup exceptions are logged cleanly and shuts down the process with exit code {@code 1}.
      */
     public void processTransportSse() {
         loggerSysout.info("Starting {} over sse transport...", MCP.MCP_JAVA_SDK_SSE_SERVER);
@@ -99,7 +100,7 @@ public class SseServer extends Server {
             // 1. Initialize the WebFlux SSE Transport Provider
             //@formatter:off
             WebFluxSseServerTransportProvider transportProvider = WebFluxSseServerTransportProvider.builder()
-                    .objectMapper(objectMapper)
+                    .jsonMapper(McpJsonDefaults.getMapper())
                     .sseEndpoint(SSE_ENDPOINT)
                     .messageEndpoint(MESSAGE_ENDPOINT).build();
             //@formatter:on
@@ -119,7 +120,7 @@ public class SseServer extends Server {
             AsyncResourceSpecification resourceEchoHello = createResourceEchoHello();
             AsyncResourceSpecification resourceEchoJunit = createResourceEchoJunit();
 
-            ResourceTemplate resourceTemplateEcho = createResourceTemplateEcho();
+            AsyncResourceTemplateSpecification resourceTemplateEcho = createResourceTemplateEcho();
 
             AsyncPromptSpecification promptCodeReview = createPromptCodeReview();
             AsyncPromptSpecification promptSummarise = createPromptSummarise();

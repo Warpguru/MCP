@@ -1,13 +1,14 @@
 package edu.java.service;
 
 import edu.java.MCP;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpAsyncServer;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncPromptSpecification;
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncResourceSpecification;
+import io.modelcontextprotocol.server.McpServerFeatures.AsyncResourceTemplateSpecification;
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
-import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import reactor.core.publisher.Mono;
@@ -60,13 +61,12 @@ public class StdioServer extends Server {
      * same machine (e.g. IDE plugins, CLI tools).
      *
      * <p>
-     * Delegates all primitive registration and server startup to
-     * {@link #buildServer(io.modelcontextprotocol.spec.McpServerTransportProvider)}.
+     * Delegates all primitive registration and server startup to {@link #buildServer(McpServerTransportProvider)}.
      */
     public void processTransportStdio() {
         logger.info("Starting {} over stdio transport...", MCP.MCP_JAVA_SDK_STDIO_SERVER);
         try {
-            buildServer(new StdioServerTransportProvider());
+            buildServer(new StdioServerTransportProvider(McpJsonDefaults.getMapper()));
         } catch (Exception e) {
             logger.error("Fatal error starting {}: {}", MCP.MCP_JAVA_SDK_STDIO_SERVER, e.getMessage());
             System.exit(1);
@@ -87,7 +87,14 @@ public class StdioServer extends Server {
      * @param transportProvider the configured transport to attach the server to
      */
     private void buildServer(final McpServerTransportProvider transportProvider) {
-        ServerCapabilities capabilities = ServerCapabilities.builder().tools(true).resources(false, true).prompts(true).build();
+        //@formatter:off
+        ServerCapabilities capabilities = ServerCapabilities
+                .builder()
+                .tools(true)
+                .resources(false, true)
+                .prompts(true)
+                .build();
+        //@formatter:on
 
         // MCP Tools (standard)
         AsyncToolSpecification toolEcho = createToolEcho();
@@ -104,7 +111,7 @@ public class StdioServer extends Server {
         AsyncResourceSpecification resourceEchoJunit = createResourceEchoJunit();
 
         // MCP Resource Templates (URI patterns advertised to clients)
-        ResourceTemplate resourceTemplateEcho = createResourceTemplateEcho();
+        AsyncResourceTemplateSpecification resourceTemplateEcho = createResourceTemplateEcho();
 
         // MCP Prompts
         AsyncPromptSpecification promptCodeReview = createPromptCodeReview();

@@ -1,6 +1,12 @@
 ---
 name: add-mcp-primitive
-description: Use when the user wants to add a new MCP Tool, Resource, Resource Template, or Prompt to the Java MCP tutorial server. Guides through adding the factory method, registering it in all three server subclasses, verifying the build, and updating the documentation.
+description: >-
+  Use when the user wants to add a new MCP Tool, Resource, Resource Template, or
+  Prompt to the Java MCP tutorial server. Guides through adding the factory
+  method, registering it in all three server subclasses, verifying the build,
+  and updating the documentation.
+metadata:
+  disable-model-invocation: true
 ---
 
 # Add a New MCP Primitive

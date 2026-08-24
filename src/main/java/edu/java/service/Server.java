@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.java.util.SchemaBuilder;
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncPromptSpecification;
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncResourceSpecification;
+import io.modelcontextprotocol.server.McpServerFeatures.AsyncResourceTemplateSpecification;
 import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
@@ -30,9 +31,9 @@ import io.modelcontextprotocol.spec.McpSchema.Tool;
 import reactor.core.publisher.Mono;
 
 /**
- * Abstract base class representing a generic MCP Server.
- * Holds all shared MCP primitive factory methods, shared constants, Jackson ObjectMapper instance,
- * and base properties such as the serverType and serverName to resolve small parameter differences.
+ * Abstract base class representing a generic MCP Server. Holds all shared MCP primitive factory methods, shared constants,
+ * Jackson ObjectMapper instance, and base properties such as the serverType and serverName to resolve small parameter
+ * differences.
  */
 public abstract class Server {
 
@@ -76,12 +77,20 @@ public abstract class Server {
      * @return the fully configured {@link AsyncToolSpecification} ready for registration
      */
     protected AsyncToolSpecification createToolEcho() {
-        Tool tool = new Tool("echo", "[MCP Primitives:Tool] Echoes the provided message back to the caller.",
-                toJson(SchemaBuilder.singleStringParameter("message", "The text to echo back")));
-        return new AsyncToolSpecification(tool, (exchange, arguments) -> {
-            logger.info("Executing [MCP Primitives:Tool] 'echo' with arguments: {}", arguments);
-            String msg = (String) arguments.get("message");
-            return Mono.just(new CallToolResult(List.of(new TextContent(msg != null ? "Echo: " + msg : "Echo: ")), false));
+        //@formatter:off
+        Tool tool = Tool
+                .builder("echo", SchemaBuilder.singleStringParameter("message", "The text to echo back"))
+                .description("[MCP Primitives:Tool] Echoes the provided message back to the caller.")
+                .build();
+        //@formatter:on
+        return new AsyncToolSpecification(tool, (exchange, callToolRequest) -> {
+            logger.info("Executing [MCP Primitives:Tool] 'echo' with arguments: {}", callToolRequest.arguments());
+            String msg = (String) callToolRequest.arguments().get("message");
+            //@formatter:off
+            return Mono.just(CallToolResult.builder()
+                    .content(List.of(TextContent.builder(msg != null ? "Echo: " + msg : "Echo: ").build())).isError(false)
+                    .build());
+            //@formatter:on
         });
     }
 
@@ -96,18 +105,25 @@ public abstract class Server {
      * @return the fully configured {@link AsyncToolSpecification} ready for registration
      */
     protected AsyncToolSpecification createToolAdd() {
-        Tool tool = new Tool("add", "[MCP Primitives:Tool] Adds two integers and returns the sum.",
-                toJson(SchemaBuilder.objectSchema("Two integer operands",
-                        Map.of("a", "First integer operand", "b", "Second integer operand"), List.of("a", "b"))));
-        return new AsyncToolSpecification(tool, (exchange, arguments) -> {
-            logger.info("Executing [MCP Primitives:Tool] 'add' with arguments: {}", arguments);
+        //@formatter:off
+        Tool tool = Tool
+                .builder("add",
+                        SchemaBuilder.objectSchema("Two integer operands",
+                                Map.of("a", "First integer operand", "b", "Second integer operand"), List.of("a", "b")))
+                .description("[MCP Primitives:Tool] Adds two integers and returns the sum.")
+                .build();
+        //@formatter:on
+        return new AsyncToolSpecification(tool, (exchange, callToolRequest) -> {
+            logger.info("Executing [MCP Primitives:Tool] 'add' with arguments: {}", callToolRequest.arguments());
             try {
-                int a = Integer.parseInt(arguments.get("a").toString());
-                int b = Integer.parseInt(arguments.get("b").toString());
-                return Mono.just(new CallToolResult(List.of(new TextContent(String.valueOf(a + b))), false));
+                int a = Integer.parseInt(callToolRequest.arguments().get("a").toString());
+                int b = Integer.parseInt(callToolRequest.arguments().get("b").toString());
+                return Mono.just(CallToolResult.builder().content(List.of(TextContent.builder(String.valueOf(a + b)).build()))
+                        .isError(false).build());
             } catch (Exception e) {
                 logger.error("Error executing 'add' tool", e);
-                return Mono.just(new CallToolResult(List.of(new TextContent("Error: " + e.getMessage())), true));
+                return Mono.just(CallToolResult.builder()
+                        .content(List.of(TextContent.builder("Error: " + e.getMessage()).build())).isError(true).build());
             }
         });
     }
@@ -121,13 +137,17 @@ public abstract class Server {
      * @return the fully configured {@link AsyncToolSpecification} ready for registration
      */
     protected AsyncToolSpecification createToolCurrentTime() {
-        Tool tool = new Tool("current_time",
-                "[MCP Primitives:Tool] Returns the current server date and time in ISO-8601 format.",
-                toJson(Map.of("type", "object", "properties", Map.of())));
-        return new AsyncToolSpecification(tool, (exchange, arguments) -> {
+        //@formatter:off
+        Tool tool = Tool
+                .builder("current_time", Map.of("type", "object", "properties", Map.of()))
+                .description("[MCP Primitives:Tool] Returns the current server date and time in ISO-8601 format.")
+                .build();
+        //@formatter:on
+        return new AsyncToolSpecification(tool, (exchange, callToolRequest) -> {
             logger.info("Executing [MCP Primitives:Tool] 'current_time'");
             String now = Instant.now().toString();
-            return Mono.just(new CallToolResult(List.of(new TextContent(now)), false));
+            return Mono
+                    .just(CallToolResult.builder().content(List.of(TextContent.builder(now).build())).isError(false).build());
         });
     }
 
@@ -135,32 +155,38 @@ public abstract class Server {
      * MCP Sampling Capability wrapper — {@code llm_expand}.
      *
      * <p>
-     * Triggers a sampling round-trip back to the client. This method is registered as a Tool, but semantically wraps 
-     * an LLM text generation request. When invoked, it builds a {@link CreateMessageRequest} and calls 
+     * Triggers a sampling round-trip back to the client. This method is registered as a Tool, but semantically wraps an LLM
+     * text generation request. When invoked, it builds a {@link CreateMessageRequest} and calls
      * {@code exchange.createMessage(request)} to instruct the client's host LLM to expand the phrase.
      *
      * @return the fully configured {@link AsyncToolSpecification} ready for registration
      */
     protected AsyncToolSpecification createSamplingLlmExpand() {
-        Tool tool = new Tool("llm_expand",
-                "[MCP Capability:Sampling] Asks the LLM to expand a short phrase into a full paragraph.",
-                toJson(SchemaBuilder.singleStringParameter("phrase", "The short phrase to expand")));
-        return new AsyncToolSpecification(tool, (exchange, arguments) -> {
-            logger.info("Executing [MCP Capability:Sampling] 'llm_expand' with arguments: {}", arguments);
-            String phrase = (String) arguments.get("phrase");
+        //@formatter:off
+        Tool tool = Tool
+                .builder("llm_expand", SchemaBuilder.singleStringParameter("phrase", "The short phrase to expand"))
+                .description("[MCP Capability:Sampling] Asks the LLM to expand a short phrase into a full paragraph.")
+                .build();
+        //@formatter:on
+        return new AsyncToolSpecification(tool, (exchange, callToolRequest) -> {
+            logger.info("Executing [MCP Capability:Sampling] 'llm_expand' with arguments: {}", callToolRequest.arguments());
+            String phrase = (String) callToolRequest.arguments().get("phrase");
             if (phrase == null) {
-                return Mono.just(new CallToolResult(List.of(new TextContent("Error: missing phrase argument")), true));
+                return Mono.just(CallToolResult.builder()
+                        .content(List.of(TextContent.builder("Error: missing phrase argument").build())).isError(true).build());
             }
-            CreateMessageRequest samplingRequest = CreateMessageRequest.builder()
-                    .messages(List.of(new SamplingMessage(Role.USER,
-                            new TextContent("Expand the following short phrase into one clear paragraph: " + phrase))))
-                    .maxTokens(256).systemPrompt("You are a helpful writing assistant.").build();
+            List<SamplingMessage> msgs = List.of(new SamplingMessage(Role.USER,
+                    TextContent.builder("Expand the following short phrase into one clear paragraph: " + phrase).build()));
+            CreateMessageRequest samplingRequest = CreateMessageRequest.builder(msgs, 256)
+                    .systemPrompt("You are a helpful writing assistant.").build();
             return exchange.createMessage(samplingRequest).map(result -> {
                 String generated = ((TextContent) result.content()).text();
-                return new CallToolResult(List.of(new TextContent(generated)), false);
+                return CallToolResult.builder().content(List.of(TextContent.builder(generated).build())).isError(false).build();
             }).onErrorResume(e -> {
                 logger.error("Sampling error in [MCP Primitives:Tool] 'llm_expand'", e);
-                return Mono.just(new CallToolResult(List.of(new TextContent("Sampling error: " + e.getMessage())), true));
+                return Mono.just(CallToolResult.builder()
+                        .content(List.of(TextContent.builder("Sampling error: " + e.getMessage()).build())).isError(true)
+                        .build());
             });
         });
     }
@@ -173,18 +199,30 @@ public abstract class Server {
      * MCP Resource — {@code mcp://poc/info}.
      *
      * <p>
-     * Static informational resource: returns basic information about the running server, SDK name, and the active JVM 
-     * version resolved at request time. Served as {@code text/plain}.
+     * Static informational resource: returns basic information about the running server, SDK name, and the active JVM version
+     * resolved at request time. Served as {@code text/plain}.
      *
      * @return the fully configured {@link AsyncResourceSpecification} ready for registration
      */
     protected AsyncResourceSpecification createResourceInfo() {
-        Resource resource = new Resource("mcp://poc/info", serverName,
-                "[MCP Primitives:Resource] Return basic information about this MCP PoC server", "text/plain", null);
+        //@formatter:off
+        Resource resource = Resource
+                .builder("mcp://poc/info", serverName)
+                .description("[MCP Primitives:Resource] Return basic information about this MCP PoC server")
+                .mimeType("text/plain")
+                .build();
+        //@formatter:on
         return new AsyncResourceSpecification(resource, (exchange, request) -> {
             logger.info("Reading [MCP Primitives:Resource] 'mcp://poc/info'");
-            return Mono.just(new ReadResourceResult(List.of(new TextResourceContents("mcp://poc/info", "text/plain",
-                    "MCP PoC " + serverType + "\nSDK : MCP Java SDK\nJava: " + System.getProperty("java.version")))));
+            return Mono
+                    .just(ReadResourceResult
+                            .builder(
+                                    List.of(TextResourceContents
+                                            .builder("mcp://poc/info",
+                                                    "MCP PoC " + serverType + "\nSDK : MCP Java SDK\nJava: "
+                                                            + System.getProperty("java.version"))
+                                            .mimeType("text/plain").build()))
+                            .build());
         });
     }
 
@@ -192,14 +230,19 @@ public abstract class Server {
      * MCP Resource — {@code mcp://poc/system-properties}.
      *
      * <p>
-     * Server properties dump: dynamically gathers all active JVM system properties, maps them to a JSON object, and 
-     * escapes slashes and double quotes safely. Served as {@code application/json}.
+     * Server properties dump: dynamically gathers all active JVM system properties, maps them to a JSON object, and escapes
+     * slashes and double quotes safely. Served as {@code application/json}.
      *
      * @return the fully configured {@link AsyncResourceSpecification} ready for registration
      */
     protected AsyncResourceSpecification createResourceSystemProperties() {
-        Resource resource = new Resource("mcp://poc/system-properties", "System Properties",
-                "[MCP Primitives:Resource] Return all JVM system properties and environment variables as JSON", "application/json", null);
+        //@formatter:off
+        Resource resource = Resource
+                .builder("mcp://poc/system-properties", "System Properties")
+                .description("[MCP Primitives:Resource] Return all JVM system properties and environment variables as JSON")
+                .mimeType("application/json")
+                .build();
+        //@formatter:on
         return new AsyncResourceSpecification(resource, (exchange, request) -> {
             logger.info("Reading [MCP Primitives:Resource] 'mcp://poc/system-properties'");
             try {
@@ -219,8 +262,8 @@ public abstract class Server {
                 // 2. Serialize OS Environment Variables
                 sb.append("\"Environment\":{");
                 var env = System.getenv();
-                env.forEach((k, v) -> sb.append("\"").append(k).append("\":\"").append(
-                        v.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r"))
+                env.forEach((k, v) -> sb.append("\"").append(k).append("\":\"")
+                        .append(v.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r"))
                         .append("\","));
                 if (sb.charAt(sb.length() - 1) == ',') {
                     sb.deleteCharAt(sb.length() - 1);
@@ -228,8 +271,8 @@ public abstract class Server {
                 sb.append("}");
 
                 sb.append("}");
-                return Mono.just(new ReadResourceResult(
-                        List.of(new TextResourceContents("mcp://poc/system-properties", "application/json", sb.toString()))));
+                return Mono.just(ReadResourceResult.builder(List.of(TextResourceContents
+                        .builder("mcp://poc/system-properties", sb.toString()).mimeType("application/json").build())).build());
             } catch (Exception e) {
                 return Mono.error(e);
             }
@@ -240,21 +283,28 @@ public abstract class Server {
      * MCP Resource Template instance — {@code mcp://poc/echo/Hello-From-Resource-Template}.
      *
      * <p>
-     * Demonstration static resource representing an instantiated template pattern path. Extracts the message portion 
-     * and returns it as plain text.
+     * Demonstration static resource representing an instantiated template pattern path. Extracts the message portion and
+     * returns it as plain text.
      *
      * @return the fully configured {@link AsyncResourceSpecification} ready for registration
      */
     protected AsyncResourceSpecification createResourceEchoHello() {
-        Resource resource = new Resource("mcp://poc/echo/Hello-From-Resource-Template", "Echo Hello Resource",
-                "[MCP Primitives:Resource] Return static resource whose URI conforms to the echo resource template",
-                "text/plain", null);
+        //@formatter:off
+        Resource resource = Resource
+                .builder("mcp://poc/echo/Hello-From-Resource-Template", "Echo Hello Resource")
+                .description(
+                        "[MCP Primitives:Resource] Return static resource whose URI conforms to the echo resource template")
+                .mimeType("text/plain")
+                .build();
+        //@formatter:on
         return new AsyncResourceSpecification(resource, (exchange, request) -> {
             String uri = request.uri();
             logger.info("Reading [MCP Primitives:Resource] template instance: {}", uri);
             String text = uri.substring(uri.lastIndexOf('/') + 1);
-            return Mono.just(
-                    new ReadResourceResult(List.of(new TextResourceContents(uri, "text/plain", "Resource echo: " + text))));
+            return Mono.just(ReadResourceResult
+                    .builder(
+                            List.of(TextResourceContents.builder(uri, "Resource echo: " + text).mimeType("text/plain").build()))
+                    .build());
         });
     }
 
@@ -267,15 +317,21 @@ public abstract class Server {
      * @return the fully configured {@link AsyncResourceSpecification} ready for registration
      */
     protected AsyncResourceSpecification createResourceEchoJunit() {
-        Resource resource = new Resource("mcp://poc/echo/junit-test", "Echo Junit Resource",
-                "[MCP Primitives:Resource] Return static resource whose URI conforms to the echo resource template, used in Junit tests",
-                "text/plain", null);
+        //@formatter:off
+        Resource resource = Resource
+                .builder("mcp://poc/echo/junit-test", "Echo Junit Resource")
+                .description("[MCP Primitives:Resource] Return static resource whose URI conforms to the echo resource template, used in Junit tests")
+                .mimeType("text/plain")
+                .build();
+        //@formatter:on
         return new AsyncResourceSpecification(resource, (exchange, request) -> {
             String uri = request.uri();
             logger.info("Reading [MCP Primitives:Resource] template instance: {}", uri);
             String text = uri.substring(uri.lastIndexOf('/') + 1);
-            return Mono.just(
-                    new ReadResourceResult(List.of(new TextResourceContents(uri, "text/plain", "Resource echo: " + text))));
+            return Mono.just(ReadResourceResult
+                    .builder(
+                            List.of(TextResourceContents.builder(uri, "Resource echo: " + text).mimeType("text/plain").build()))
+                    .build());
         });
     }
 
@@ -283,14 +339,28 @@ public abstract class Server {
      * MCP Resource Template — {@code mcp://poc/echo/{message}}.
      *
      * <p>
-     * Advertises support for the dynamic echo resource template. This serves as metadata only; actual routing and retrieval 
-     * is resolved via exact pre-registered URI specifications in this SDK version.
+     * Advertises support for the dynamic echo resource template. The handler extracts the {@code {message}} portion of the URI
+     * and returns it as plain text. Delegates to the same extraction logic used by the static resource specifications.
      *
-     * @return the fully configured {@link ResourceTemplate} ready for advertisement
+     * @return the fully configured {@link AsyncResourceTemplateSpecification} ready for registration
      */
-    protected ResourceTemplate createResourceTemplateEcho() {
-        return new ResourceTemplate("mcp://poc/echo/{message}", "Echo Resource",
-                "[MCP Primitives:Resource] Returns the {message} portion of the URI as plain text", "text/plain", null);
+    protected AsyncResourceTemplateSpecification createResourceTemplateEcho() {
+        //@formatter:off
+        ResourceTemplate resourceTemplate = ResourceTemplate
+                .builder("mcp://poc/echo/{message}", "Echo Resource")
+                .description("[MCP Primitives:Resource] Returns the {message} portion of the URI as plain text")
+                .mimeType("text/plain")
+                .build();
+        //@formatter:on
+        return new AsyncResourceTemplateSpecification(resourceTemplate, (exchange, request) -> {
+            String uri = request.uri();
+            logger.info("Reading [MCP Primitives:ResourceTemplate] template instance: {}", uri);
+            String text = uri.substring(uri.lastIndexOf('/') + 1);
+            return Mono.just(ReadResourceResult
+                    .builder(
+                            List.of(TextResourceContents.builder(uri, "Resource echo: " + text).mimeType("text/plain").build()))
+                    .build());
+        });
     }
 
     // -------------------------------------------------------------------------
@@ -301,15 +371,21 @@ public abstract class Server {
      * MCP Prompt — {@code code_review}.
      *
      * <p>
-     * Code review prompt generator: accepts required arguments {@code language} and {@code code}. Returns a multi-message 
+     * Code review prompt generator: accepts required arguments {@code language} and {@code code}. Returns a multi-message
      * prompt instructing the host LLM to review the provided snippet for style, correctness, and security.
      *
      * @return the fully configured {@link AsyncPromptSpecification} ready for registration
      */
     protected AsyncPromptSpecification createPromptCodeReview() {
-        Prompt prompt = new Prompt("code_review", "[MCP Primitives:Prompt] Ask the LLM to review a code snippet",
-                List.of(new PromptArgument("language", "Programming language", true),
-                        new PromptArgument("code", "The code to review", true)));
+        //@formatter:off
+        Prompt prompt = Prompt
+                .builder("code_review")
+                .description("[MCP Primitives:Prompt] Ask the LLM to review a code snippet")
+                .arguments(
+                        List.of(PromptArgument.builder("language").description("Programming language").required(true).build(),
+                                PromptArgument.builder("code").description("The code to review").required(true).build()))
+                .build();
+        //@formatter:on
         return new AsyncPromptSpecification(prompt, (exchange, request) -> {
             logger.info("Serving [MCP Primitives:Prompt] 'code_review'");
             Map<String, Object> arguments = request.arguments();
@@ -318,9 +394,10 @@ public abstract class Server {
             String systemText = "You are an expert " + language + " developer. Review the following code for correctness, "
                     + "security, and style. Be concise.";
             String userText = "```" + language + "\n" + code + "\n```";
-            return Mono.just(new GetPromptResult("Code review prompt for " + language,
-                    List.of(new PromptMessage(Role.USER, new TextContent(systemText)),
-                            new PromptMessage(Role.USER, new TextContent(userText)))));
+            return Mono.just(GetPromptResult
+                    .builder(List.of(new PromptMessage(Role.USER, TextContent.builder(systemText).build()),
+                            new PromptMessage(Role.USER, TextContent.builder(userText).build())))
+                    .description("Code review prompt for " + language).build());
         });
     }
 
@@ -328,25 +405,31 @@ public abstract class Server {
      * MCP Prompt — {@code summarise}.
      *
      * <p>
-     * Summarisation prompt generator: accepts required argument {@code text} and optional argument {@code points} 
-     * (which defaults to {@code "5"}). Formulates a single system prompt message asking the host LLM to break the text 
-     * down into concise bullet points.
+     * Summarisation prompt generator: accepts required argument {@code text} and optional argument {@code points} (which
+     * defaults to {@code "5"}). Formulates a single system prompt message asking the host LLM to break the text down into
+     * concise bullet points.
      *
      * @return the fully configured {@link AsyncPromptSpecification} ready for registration
      */
     protected AsyncPromptSpecification createPromptSummarise() {
-        Prompt prompt = new Prompt("summarise",
-                "[MCP Primitives:Prompt] Summarise a block of text in a given number of bullet points",
-                List.of(new PromptArgument("text", "Text to summarise", true),
-                        new PromptArgument("points", "Number of bullet points (default 5)", false)));
+        //@formatter:off
+        Prompt prompt = Prompt
+                .builder("summarise")
+                .description("[MCP Primitives:Prompt] Summarise a block of text in a given number of bullet points")
+                .arguments(List.of(PromptArgument.builder("text").description("Text to summarise").required(true).build(),
+                        PromptArgument.builder("points").description("Number of bullet points (default 5)").required(false)
+                                .build()))
+                .build();
+        //@formatter:on
         return new AsyncPromptSpecification(prompt, (exchange, request) -> {
             logger.info("Serving [MCP Primitives:Prompt] 'summarise'");
             Map<String, Object> arguments = request.arguments();
             String text = arguments != null ? (String) arguments.getOrDefault("text", "") : "";
             String points = arguments != null ? (String) arguments.getOrDefault("points", "5") : "5";
             String userText = "Summarise the following text in exactly " + points + " concise bullet points:\n\n" + text;
-            return Mono.just(new GetPromptResult("Summarisation prompt",
-                    List.of(new PromptMessage(Role.USER, new TextContent(userText)))));
+            return Mono
+                    .just(GetPromptResult.builder(List.of(new PromptMessage(Role.USER, TextContent.builder(userText).build())))
+                            .description("Summarisation prompt").build());
         });
     }
 
