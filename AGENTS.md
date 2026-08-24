@@ -8,8 +8,8 @@ Welcome! This document provides essential project context, architectural decisio
 
 This project is a hands-on tutorial and implementation testbed for the Java MCP SDK. It consists of:
 * **The Launcher (`edu.java.MCP`)**: A central CLI entrypoint that acts as a router.
-  * Running `java -jar target/MCP-1.0.0.jar server` starts the MCP Server.
-  * Running `java -jar target/MCP-1.0.0.jar client` starts the MCP Client (Feature Dumper).
+  * Running `java -jar target/MCP-2.0.0.jar server` starts the MCP Server.
+  * Running `java -jar target/MCP-2.0.0.jar client` starts the MCP Client (Feature Dumper).
 * **The MCP Server (`edu.java.service.Server`)**: A compliant server implementing Tools, Resources, Prompts, and Sampling.
 * **The MCP Client (`edu.java.service.Client`)**: A universal diagnostics client that launches any target server as a child process via standard I/O, queries its capabilities, dumps its definitions, and executes demo flows.
 
@@ -141,7 +141,7 @@ Mono.never().block();
 Build the `McpAsyncClient` with the client parameters and connect/handshake by invoking `.initialize().block()` (do not search for a standalone `.connect()` method):
 ```java
 ServerParameters params = ServerParameters.builder("java")
-    .args(List.of("-cp", "target/MCP-1.0.0.jar", "edu.java.service.StdioServer"))
+    .args(List.of("-cp", "target/MCP-2.0.0.jar", "edu.java.service.StdioServer"))
     .build();
 
 StdioClientTransport transport = new StdioClientTransport(params, McpJsonDefaults.getMapper());
@@ -183,11 +183,11 @@ Since the launcher is fully integrated into `edu.java.MCP`, both the server and 
 * **Running the Client (Universal Feature Dumper)**:
   This launches the client, which in turn starts our in-process server as a child process, dumps its Tools, and executes tool verification.
   ```powershell
-  cmd.exe /c "D:\Development\SetupEnvJava21.cmd && java -jar target\MCP-1.0.0.jar client"
+  cmd.exe /c "D:\Development\SetupEnvJava21.cmd && java -jar target\MCP-2.0.0.jar client"
   ```
 
 * **Running the Server directly (Standalone Stdio Daemon)**:
   Launches our server standalone, ready to receive JSON-RPC standard I/O streams from any external host or client.
   ```powershell
-  cmd.exe /c "D:\Development\SetupEnvJava21.cmd && java -jar target\MCP-1.0.0.jar server"
+  cmd.exe /c "D:\Development\SetupEnvJava21.cmd && java -jar target\MCP-2.0.0.jar server"
   ```

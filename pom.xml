@@ -6,6 +6,7 @@
 	<groupId>edu.java</groupId>
 	<artifactId>MCP</artifactId>
 	<packaging>jar</packaging>
+	<!-- Keep version in sync with MCP.java:MCP_VERSION -->
 	<version>2.0.0</version>
 	<name>MCP</name>
 	<description>MCP Tutorial</description>
