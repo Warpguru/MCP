@@ -1,4 +1,8 @@
-name: Maven Package
+# Build artifact and add it to a release:
+#   - manually by running this Github action (see workflow_dispatch)
+#   - automatically when a new release is created
+
+name: Maven Release
 
 on:
   release:
@@ -14,6 +18,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     permissions:
       contents: write
 
@@ -35,4 +40,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.event.release.tag_name }}
-          files: target/*.jar
+          files: target/MCP-*.jar
