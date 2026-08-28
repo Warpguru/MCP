@@ -1,0 +1,38 @@
+name: Maven Package
+
+on:
+  release:
+    types: [created]
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to upload the JAR to'
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Build JAR
+        run: mvn -B clean package
+
+      - name: Upload JAR to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+          files: target/*.jar
