@@ -21,7 +21,7 @@ public class MCP {
     private static final Logger loggerSysout = LogManager.getLogger("edu.java.Sysout");
 
     /** MCP version (keep in sync with pom.xml). */
-    public static final String MCP_VERSION = "2.0.0";
+    public static final String MCP_VERSION = "2.0.1";
 
     /** MCP stdio server. */
     public static final String MCP_JAVA_SDK_STDIO_SERVER = "MCP Java SDK StdioServer";

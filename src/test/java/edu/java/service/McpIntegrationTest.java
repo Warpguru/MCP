@@ -1,7 +1,11 @@
 package edu.java.service;
 
 import org.junit.jupiter.api.Test;
+
+import java.util.concurrent.TimeUnit;
+
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * End-to-end integration test suite that exercises the full MCP protocol flow across all three supported transports: stdio,
@@ -58,6 +62,48 @@ public class McpIntegrationTest {
         assertDoesNotThrow(() -> {
             Client.main(new String[] {});
         }, "The end-to-end stdio client-server interaction should complete without throwing any exception.");
+    }
+
+    /**
+     * Verifies that the Stdio server process exits cleanly when its stdin pipe is closed (EOF), with no MCP session established
+     * beforehand.
+     *
+     * <p>
+     * This test directly targets the <em>"orphan process"</em> scenario: a host that spawns the server as a child process and
+     * then closes the stdin pipe without sending an OS kill signal. Prior to the fix, the server blocked indefinitely on
+     * {@code Mono.never().block()} and never exited. The fix wraps {@code System.in} with an EOF-detecting
+     * {@link java.io.FilterInputStream}; when the SDK's {@code stdio-inbound} background thread reads the EOF, the stop signal
+     * is emitted and {@link System#exit} is called with code {@code 0}.
+     *
+     * <p>
+     * <b>Test approach:</b> spawn the server as a raw OS {@link Process} via {@link ProcessBuilder} — not via
+     * {@link io.modelcontextprotocol.client.transport.StdioClientTransport}, which hides the {@link Process} handle inside the
+     * SDK. No MCP handshake is performed; stdin is closed immediately after the process starts. The test then asserts the
+     * process exits within 10 seconds.
+     */
+    @Test
+    public void testStdioServerExitsOnStdinEof() throws Exception {
+        // Spawn the server using the same java executable and classpath that Maven Surefire uses.
+        ProcessBuilder processBuilder = new ProcessBuilder(System.getProperty("java.home") + "/bin/java", "-cp",
+                System.getProperty("java.class.path"), StdioServer.class.getName());
+        // Redirect stderr to this JVM's stderr so server log lines appear in the Surefire output.
+        processBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
+        // Start the child process. Its stdin is a pipe whose write-end we own.
+        Process server = processBuilder.start();
+        // Close stdin immediately — this is exactly what a host does when it closes the pipe.
+        // No MCP messages are written; we only care that the server exits.
+        server.getOutputStream().close();
+        // The server should detect EOF and call System.exit(0) within a few seconds.
+        // 10 seconds is a generous upper bound for JVM startup + EOF detection.
+        boolean exited = server.waitFor(10, TimeUnit.SECONDS);
+        if (!exited) {
+            // Forcibly terminate so the test does not leave a lingering java.exe process.
+            server.destroyForcibly();
+        }
+        assertTrue(exited,
+                "StdioServer process should exit within 10 s after stdin is closed (EOF). "
+                        + "If this times out, the EOF-detecting FilterInputStream or System.exit(0) in "
+                        + "StdioServer.processTransportStdio() is not functioning correctly.");
     }
 
     /**

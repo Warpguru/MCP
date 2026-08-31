@@ -46,14 +46,14 @@ mvn clean package
 Run the launcher without any arguments to see the help text and verify that the core MCP SDK classes load successfully:
 
 ```bash
-java -jar target/MCP-2.0.0.jar
+java -jar target/MCP-x.y.z.jar
 ```
 
 ---
 
 ## Launcher & Transport Comparison
 
-The entry point `java -jar target/MCP-2.0.0.jar` routes to different components depending on the subcommand and arguments passed. Below is a detailed breakdown of how the three server transports and the client differ.
+The entry point `java -jar target/MCP-x.y.z.jar` routes to different components depending on the subcommand and arguments passed. Below is a detailed breakdown of how the three server transports and the client differ.
 
 ### Comparison Table
 
@@ -76,21 +76,21 @@ The entry point `java -jar target/MCP-2.0.0.jar` routes to different components 
 Designed to run purely as an embedded subprocess. **Never launch this manually to interact with it directly**, as your terminal keystrokes will corrupt the JSON-RPC stream framing.
 
 ```bash
-java -jar target/MCP-2.0.0.jar stdioserver
+java -jar target/MCP-x.y.z.jar stdioserver
 ```
 
 ### 2. Launch MCP Server over Server-Sent Events (SSE)
 Launches a standalone Reactor Netty server on local port `8080`. Uses the **legacy MCP Spec 2024-11-05** two-endpoint model.
 
 ```bash
-java -jar target/MCP-2.0.0.jar sseserver
+java -jar target/MCP-x.y.z.jar sseserver
 ```
 
 ### 3. Launch MCP Server over Streamable HTTP
 Launches a standalone Reactor Netty server on local port `8081`. Uses the **modern MCP Spec 2025-03-26** single-endpoint model. This is the recommended transport for new integrations.
 
 ```bash
-java -jar target/MCP-2.0.0.jar streamableserver
+java -jar target/MCP-x.y.z.jar streamableserver
 ```
 
 ---
@@ -103,7 +103,7 @@ The client subcommand supports three entirely separate syntax tracks depending o
 In this mode, the client launches an MCP server as a local child process and talks to it over stdin/stdout.
 
 ```bash
-java -jar target/MCP-2.0.0.jar client [command] [args...]
+java -jar target/MCP-x.y.z.jar client [command] [args...]
 ```
 
 #### Mode A: Internal Loopback (Omit All Parameters)
@@ -112,7 +112,7 @@ If you run the client with **no arguments**, it automatically boots the internal
 * **`[args...]`**: Omitted.
 
 ```bash
-java -jar target/MCP-2.0.0.jar client
+java -jar target/MCP-x.y.z.jar client
 ```
 
 #### Mode B: Custom Stdio Subprocess (Provide Command)
@@ -122,13 +122,13 @@ If you specify a command, the client spawns `[command] [args...]` as a child pro
 
 ```bash
 # Spawns our own StdioServer class explicitly as a custom subprocess
-java -jar target/MCP-2.0.0.jar client java -cp target/MCP-2.0.0.jar edu.java.service.StdioServer
+java -jar target/MCP-x.y.z.jar client java -cp target/MCP-x.y.z.jar edu.java.service.StdioServer
 
 # Spawns an external Node.js MCP server
-java -jar target/MCP-2.0.0.jar client node /path/to/mcp-server.js
+java -jar target/MCP-x.y.z.jar client node /path/to/mcp-server.js
 
 # Spawns an external Python MCP server
-java -jar target/MCP-2.0.0.jar client python /path/to/mcp_server.py
+java -jar target/MCP-x.y.z.jar client python /path/to/mcp_server.py
 ```
 
 ---
@@ -137,7 +137,7 @@ java -jar target/MCP-2.0.0.jar client python /path/to/mcp_server.py
 In this mode, the client connects over the network to a running standalone HTTP+SSE server.
 
 ```bash
-java -jar target/MCP-2.0.0.jar client sse [url]
+java -jar target/MCP-x.y.z.jar client sse [url]
 ```
 
 #### Mode C: Remote SSE Handshake
@@ -147,10 +147,10 @@ By providing the literal keyword `sse`, the client activates the legacy SSE tran
 
 ```bash
 # Connect to the default local SSE Server (127.0.0.1:8080)
-java -jar target/MCP-2.0.0.jar client sse
+java -jar target/MCP-x.y.z.jar client sse
 
 # Connect to an SSE Server running on a custom address/port
-java -jar target/MCP-2.0.0.jar client sse http://127.0.0.1:9090
+java -jar target/MCP-x.y.z.jar client sse http://127.0.0.1:9090
 ```
 
 ---
@@ -159,7 +159,7 @@ java -jar target/MCP-2.0.0.jar client sse http://127.0.0.1:9090
 In this mode, the client connects over the network to a running standalone Streamable HTTP server (MCP Spec 2025-03-26).
 
 ```bash
-java -jar target/MCP-2.0.0.jar client streamable [url]
+java -jar target/MCP-x.y.z.jar client streamable [url]
 ```
 
 #### Mode D: Remote Streamable HTTP Handshake
@@ -169,10 +169,10 @@ By providing the literal keyword `streamable`, the client activates the modern S
 
 ```bash
 # Connect to the default local Streamable HTTP Server (127.0.0.1:8081)
-java -jar target/MCP-2.0.0.jar client streamable
+java -jar target/MCP-x.y.z.jar client streamable
 
 # Connect to a Streamable HTTP Server running on a custom address/port
-java -jar target/MCP-2.0.0.jar client streamable http://127.0.0.1:9091
+java -jar target/MCP-x.y.z.jar client streamable http://127.0.0.1:9091
 ```
 
 ---
@@ -183,7 +183,7 @@ java -jar target/MCP-2.0.0.jar client streamable http://127.0.0.1:9091
 The official Node-based [MCP Inspector](https://modelcontextprotocol.io/docs/2026-07-28/tools/inspector/web) provides an interactive browser UI for debugging. Run it by pointing to the target Stdio class:
 
 ```bash
-npx @modelcontextprotocol/inspector@latest java -cp target/MCP-2.0.0.jar edu.java.service.StdioServer
+npx @modelcontextprotocol/inspector@latest java -cp target/MCP-x.y.z.jar edu.java.service.StdioServer
 ```
 
 ### Register Stdio in IBM Bob IDE
@@ -196,7 +196,7 @@ To register the Stdio server inside your AI assistant / Bob host environment, in
       "command": "X:\\Path\\Java\\Java21\\bin\\java.exe",
       "args": [
         "-jar",
-        "X:\\Path\\MCP\\target\\MCP-2.0.0.jar",
+        "X:\\Path\\MCP\\target\\MCP-x.y.z.jar",
         "stdioserver"
       ],
       "cwd": "D:\\Workspace WCA\\MCP",
@@ -211,6 +211,8 @@ To register the Stdio server inside your AI assistant / Bob host environment, in
   }
 }
 ```
+
+> ⚠️ **Orphan process warning (IBM Bob):** When you disable this Stdio server in Bob's settings, Bob closes the MCP session but currently does **not** terminate the `java.exe` child process or close its stdin pipe. The Java process will remain alive in the background. Use `tasklist | findstr java` to check and `taskkill /F /PID <pid>` to clean up. See [Process Lifecycle & Orphan Prevention](#process-lifecycle--orphan-prevention) for the full explanation.
 
 ### Register SSE in IBM Bob IDE
 To register the standalone SSE server inside your assistant, ensure the `sseserver` is running, then add:
@@ -333,7 +335,7 @@ sequenceDiagram
     participant Host as Host / MCP Client
     participant Server as MCP Server (child process)
 
-    Host->>Server: spawn process (java -jar MCP-2.0.0.jar stdioserver)
+    Host->>Server: spawn process (java -jar MCP-x.y.z.jar stdioserver)
     Host->>Server: stdin ← {"jsonrpc":"2.0","method":"initialize",...}
     Server->>Host: stdout → {"jsonrpc":"2.0","result":{"serverInfo":...}}
     Note over Host,Server: Handshake complete — session established
@@ -490,11 +492,65 @@ return Mono.just(new CallToolResult(...));
 // .map() transforms the result when it arrives, without blocking
 return exchange.createMessage(request).map(result -> new CallToolResult(...));
 
-// Keep the main thread alive without spinning — Mono.never() never emits or completes
-Mono.never().block();
+// Block the main thread on a one-shot Sinks.One signal; unblocks on stdin-EOF or OS kill
+stopSignal.asMono().block();
 ```
 
-The server's main thread is parked on `Mono.never().block()` at the end of `buildServer()`. This is intentional: the stdio transport runs on background threads managed by Reactor. If `main()` were to return, those threads would be torn down and the server would exit.
+The `buildServer()` method configures and starts the server but **does not block**. All blocking and lifecycle management is in `processTransportStdio()`, which creates a `Sinks.One<Void>` stop signal, builds the transport, and then parks the main thread on `stopSignal.asMono().block()`. The stdio transport itself runs on background Reactor scheduler threads; the main thread just needs to stay alive until shutdown.
+
+---
+
+### Process Lifecycle & Orphan Prevention
+
+#### The MCP Stdio lifecycle contract
+
+The MCP specification does **not** define a `shutdown` notification for the Stdio transport. Lifecycle management is handled entirely at the OS level:
+
+| Event | How the server learns about it |
+|---|---|
+| Host closes the stdin pipe | `read()` on `System.in` returns `-1` (EOF) |
+| Host sends `SIGTERM` / `TerminateProcess` | JVM receives an OS termination signal |
+
+This differs from the Language Server Protocol (LSP), which has an explicit `shutdown` + `exit` request/notification pair. MCP Stdio has no equivalent — the host simply owns the child process and terminates it when done.
+
+#### What happens inside the Java SDK on stdin EOF
+
+When the host closes the stdin pipe the SDK's internal `stdio-inbound` background thread (created by `Executors.newSingleThreadExecutor()`) detects the EOF, tears down the reactive pipeline, disposes the `stdio-outbound` scheduler thread, and exits. At that point only the main thread remains — but it is still blocked on `stopSignal.asMono().block()` and the JVM cannot exit on its own.
+
+#### The two-mechanism mitigation in this project
+
+`StdioServer.processTransportStdio()` implements two complementary paths that together cover all normal termination scenarios:
+
+```
+stdin EOF path:
+  SDK StdioServerTransportProvider
+    → reads from eofDetectingStdin (our FilterInputStream wrapper)
+    → wrapper's read() returns -1
+    → wrapper calls stopSignal.tryEmitEmpty()
+    → stopSignal.asMono().block() unblocks on main thread
+    → System.exit(0) called
+
+OS-kill / SIGTERM path:
+  JVM receives termination signal
+    → registered shutdown hook fires
+    → hook calls stopSignal.tryEmitEmpty()  (no-op if already emitted)
+    → hook logs the event
+    → JVM proceeds with orderly exit
+```
+
+The `FilterInputStream` wrapper around `System.in` is fully transparent — it delegates every `read()` call to the real stream and only observes the `-1` return value. It does not compete with the transport for bytes.
+
+#### Known limitation — host closes session but keeps the process alive
+
+Some hosts (including **IBM Bob as of 2026-08**) close the internal MCP session when the user disables a server in settings, but do **not** close the stdin pipe and do **not** send an OS kill signal to the child process. In this case:
+
+- Neither the EOF wrapper nor the JVM shutdown hook fires.
+- The `java.exe` child process remains alive indefinitely.
+- If the server itself spawned child processes (e.g. via `StdioClientTransport` for LLM sampling), those grand-child `java.exe` processes are also orphaned because their parent never closes their stdin pipe.
+
+This is a **host-side gap**, not a server bug. Workaround: manually kill the orphaned processes in Task Manager, or restart the IDE. The processes consume negligible CPU while parked, but do consume memory (≈ 80–150 MB each for a JVM).
+
+> **Note for Bob users:** Until this is fixed in the host, you can check for orphaned processes with `tasklist | findstr java` in a terminal after disabling the Stdio server. Terminate them with `taskkill /F /IM java.exe` if needed (be careful if other Java processes are running).
 
 ---
 
@@ -530,7 +586,7 @@ sequenceDiagram
 ### Lifecycle and Localhost Constraints
 
 Unlike the stdio transport (which automatically spawns and kills the server process on-demand), the SSE server operates independently:
-* **Manual Lifecycle Management:** The server must be manually started (via `java -jar target/MCP-2.0.0.jar sseserver`) before any client attempts to connect, and must be manually terminated (via `Ctrl+C` or a process signal).
+* **Manual Lifecycle Management:** The server must be manually started (via `java -jar target/MCP-x.y.z.jar sseserver`) before any client attempts to connect, and must be manually terminated (via `Ctrl+C` or a process signal).
 * **Strict Security Constraints:** To adhere to local security guidelines outlined in `security.md`, `SseServer.java` binds strictly to the local loopback address `127.0.0.1` and listens on port `8080`. It never binds to `0.0.0.0` (all interfaces) to protect the server's tools and environment from unauthorized network exposure.
 
 ---
@@ -622,7 +678,7 @@ sequenceDiagram
 ### Lifecycle and Localhost Constraints
 
 Identical to the SSE transport:
-* **Manual Lifecycle Management:** The server must be started (`java -jar target/MCP-2.0.0.jar streamableserver`) before any client connects, and stopped manually via `Ctrl+C` or a process signal.
+* **Manual Lifecycle Management:** The server must be started (`java -jar target/MCP-x.y.z.jar streamableserver`) before any client connects, and stopped manually via `Ctrl+C` or a process signal.
 * **Strict Security Constraints:** `StreamableSseServer.java` binds exclusively to `127.0.0.1:8081`. It never binds to `0.0.0.0`.
 
 ---

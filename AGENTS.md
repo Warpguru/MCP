@@ -8,8 +8,8 @@ Welcome! This document provides essential project context, architectural decisio
 
 This project is a hands-on tutorial and implementation testbed for the Java MCP SDK. It consists of:
 * **The Launcher (`edu.java.MCP`)**: A central CLI entrypoint that acts as a router.
-  * Running `java -jar target/MCP-2.0.0.jar server` starts the MCP Server.
-  * Running `java -jar target/MCP-2.0.0.jar client` starts the MCP Client (Feature Dumper).
+  * Running `java -jar target/MCP-x.y.z.jar server` starts the MCP Server.
+  * Running `java -jar target/MCP-x.y.z.jar client` starts the MCP Client (Feature Dumper).
 * **The MCP Server (`edu.java.service.Server`)**: A compliant server implementing Tools, Resources, Prompts, and Sampling.
 * **The MCP Client (`edu.java.service.Client`)**: A universal diagnostics client that launches any target server as a child process via standard I/O, queries its capabilities, dumps its definitions, and executes demo flows.
 
@@ -119,7 +119,7 @@ CreateMessageResult.builder().role(Role.ASSISTANT)...
 
 `McpSchema.Implementation` in `2.0.1` has six optional builder fields beyond `name` and `version`:
 ```java
-McpSchema.Implementation.builder("my-server", "2.0.0")
+McpSchema.Implementation.builder("my-server", "x.y.z")
     .title("My MCP Server")                    // Human-readable display title (shown in Bob's MCP server list)
     .description("What this server does")      // One-sentence description (shown in Bob's MCP server list)
     .websiteUrl("https://example.com")         // Optional URL
@@ -148,7 +148,7 @@ natively speaks `2025-11-25`. As of `2026-08-24` no such Java SDK release exists
 When starting the server, instantiate `McpServer.async(transportProvider)` and chain the tool, resource, and prompt registrations directly onto the fluent builder before calling `.build()`:
 ```java
 McpAsyncServer server = McpServer.async(new StdioServerTransportProvider(McpJsonDefaults.getMapper()))
-    .serverInfo(McpSchema.Implementation.builder("my-server", "2.0.0")
+    .serverInfo(McpSchema.Implementation.builder("my-server", "x.y.z")
         .title("My MCP Server")
         .description("Short description shown in Bob's MCP server list.")
         .build())
@@ -160,16 +160,33 @@ McpAsyncServer server = McpServer.async(new StdioServerTransportProvider(McpJson
     .build();
 ```
 
-To keep a Stdio Server alive, **never** read from `System.in` as it competes with the transport. Keep the main thread running indefinitely via:
+To keep a Stdio Server alive and exit cleanly on shutdown, use a `Sinks.One<Void>` stop signal. Pass an EOF-detecting
+`FilterInputStream` wrapper around `System.in` to the `StdioServerTransportProvider` constructor — the wrapper emits on
+the signal when `read()` returns `-1`. Also register a JVM shutdown hook that emits on the same signal for OS-kill.
+Then block the main thread on the signal:
 ```java
-Mono.never().block();
+Sinks.One<Void> stopSignal = Sinks.one();
+Runtime.getRuntime().addShutdownHook(new Thread(() -> stopSignal.tryEmitEmpty(), "stdio-shutdown-hook"));
+InputStream eofStdin = new FilterInputStream(System.in) {
+    public int read() throws IOException {
+        int b = super.read(); if (b == -1) stopSignal.tryEmitEmpty(); return b;
+    }
+    public int read(byte[] buf, int off, int len) throws IOException {
+        int n = super.read(buf, off, len); if (n == -1) stopSignal.tryEmitEmpty(); return n;
+    }
+};
+buildServer(new StdioServerTransportProvider(McpJsonDefaults.getMapper(), eofStdin, System.out));
+stopSignal.asMono().block();
+System.exit(0);
 ```
+Do **not** use `Mono.never().block()` — that blocks indefinitely and the process never exits when the host closes the pipe.
+Do **not** read from `System.in` outside a `FilterInputStream` wrapper, as a second reader would steal bytes from the transport.
 
 ### 3.2 The MCP Client (Initialization Pattern)
 Build the `McpAsyncClient` with the client parameters and connect/handshake by invoking `.initialize().block()` (do not search for a standalone `.connect()` method):
 ```java
 ServerParameters params = ServerParameters.builder("java")
-    .args(List.of("-cp", "target/MCP-2.0.0.jar", "edu.java.service.StdioServer"))
+    .args(List.of("-cp", "target/MCP-x.y.z.jar", "edu.java.service.StdioServer"))
     .build();
 
 StdioClientTransport transport = new StdioClientTransport(params, McpJsonDefaults.getMapper());
@@ -211,11 +228,11 @@ Since the launcher is fully integrated into `edu.java.MCP`, both the server and 
 * **Running the Client (Universal Feature Dumper)**:
   This launches the client, which in turn starts our in-process server as a child process, dumps its Tools, and executes tool verification.
   ```powershell
-  cmd.exe /c "D:\Development\SetupEnvJava21.cmd && java -jar target\MCP-2.0.0.jar client"
+  cmd.exe /c "D:\Development\SetupEnvJava21.cmd && java -jar target\MCP-x.y.z.jar client"
   ```
 
 * **Running the Server directly (Standalone Stdio Daemon)**:
   Launches our server standalone, ready to receive JSON-RPC standard I/O streams from any external host or client.
   ```powershell
-  cmd.exe /c "D:\Development\SetupEnvJava21.cmd && java -jar target\MCP-2.0.0.jar server"
+  cmd.exe /c "D:\Development\SetupEnvJava21.cmd && java -jar target\MCP-x.y.z.jar server"
   ```
